@@ -16,7 +16,7 @@
 | 배한결 | [@pearHg](https://github.com/pearHg) |
 | 박성해 | [@sh4663](https://github.com/sh4663) |
 | 이민석 | [@ywkmin](https://github.com/ywkmin) |
-| (본인) | [@kangmin04](https://github.com/kangmin04) |
+| 김강민 | [@kangmin04](https://github.com/kangmin04) |
 
 ## 아이디어 / 주제
 미정 (Notion 팀 공간에서 논의 중)
