@@ -260,8 +260,8 @@ struct CardDetailScreen: View {
         Text(text).ds(13, .bold, .dsSub)
     }
 
-    private func field(_ text: Binding<String>) -> some View {
-        TextField("", text: text)
+    private func field(_ text: Binding<String>, axis: Axis = .horizontal) -> some View {
+        TextField("", text: text, axis: axis)
             .textFieldStyle(.plain)
             .font(.system(size: 17, weight: .medium))
             .tracking(-0.17)
@@ -340,7 +340,7 @@ extension CardDetailScreen {
 
             VStack(alignment: .leading, spacing: 8) {
                 label("내용 (LaTeX)")
-                field($latex)
+                field($latex, axis: .vertical)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
                     .frame(width: inner, height: 96, alignment: .topLeading)

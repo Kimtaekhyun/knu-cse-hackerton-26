@@ -433,6 +433,7 @@ extension CaptureScreen {
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
+            .avoidsWindowControls()
 
             Spacer(minLength: 16)
 

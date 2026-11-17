@@ -44,7 +44,7 @@ struct StickerCard: View {
 
             Group {
                 if handwriting, let ink = sticker.inkImage {
-                    Image(ink).frame(width: width - 40, height: 64, alignment: .leading).clipped()
+                    Image(ink).resizable().scaledToFit().frame(width: width - 40, height: 64, alignment: .leading)
                 } else if handwriting {
                     InkCrop(sticker: sticker, width: width - 40, height: 64)
                 } else {
@@ -209,7 +209,7 @@ struct ResultScreen: View {
     var body: some View {
         GeometryReader { geo in
             // 스플릿 뷰처럼 세로로 긴 창이면 좁은 화면용 배치를 써요.
-            if geo.size.width < geo.size.height {
+            if DS.isNarrow(geo.size) {
                 narrow(geo.size)
             } else {
                 wide
@@ -283,6 +283,7 @@ struct ResultScreen: View {
             .padding(.leading, 12)
             .padding(.trailing, side)
             .frame(height: 52)
+            .avoidsWindowControls()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
