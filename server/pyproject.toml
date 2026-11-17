@@ -10,6 +10,8 @@ dependencies = [
     "pydantic-settings",
     "google-genai",
     "httpx",
+    "pillow",
+    "numpy",
 ]
 
 [dependency-groups]
