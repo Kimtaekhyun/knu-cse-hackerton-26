@@ -18,17 +18,56 @@ struct CardDetailScreen: View {
     @State private var title = CardDetailScreen.originalTitle
     @State private var kind = 1          // 0 텍스트, 1 수식, 2 코드
     @State private var latex = CardDetailScreen.originalLatex
+    @State private var confirmingDelete = false
+    @State private var saved = false
 
     private let kinds = ["텍스트", "수식", "코드"]
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
+            .overlay(alignment: .bottom) {
+                if saved {
+                    savedToast
+                        .padding(.bottom, 120)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .alert("카드를 삭제할까요?", isPresented: $confirmingDelete) {
+                Button("취소", role: .cancel) {}
+                Button("삭제", role: .destructive) { router.pop() }
+            } message: {
+                Text("삭제한 카드는 되돌릴 수 없어요.")
+            }
+    }
+
+    /// 결과 화면 "카드 N개를 복사했어요" 알림과 같은 모양
+    private var savedToast: some View {
+        HStack(spacing: 12) {
+            Image("check-circle-24")
+            Text("카드를 저장했어요").ds(15, .bold, .white)
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 24)
+        .padding(.vertical, 14)
+        .background(Color.black)
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 12)
+    }
+
+    /// 저장 알림을 잠깐 띄운 뒤 결과 화면으로 돌아가요. (실제 저장은 데이터 연결 때)
+    private func save() {
+        guard !saved else { return }
+        withAnimation(.easeOut(duration: 0.3)) { saved = true }
+        Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            router.pop()
+        }
     }
 
     private var wide: some View {
         DesignCanvas {
             NavBar(backTitle: "결과", title: "카드 수정", onBack: { router.pop() }) {
-                Button { router.pop() } label: { Text("삭제").ds(17, .medium, .dsSub) }
+                Button { confirmingDelete = true } label: { Text("삭제").ds(17, .medium, .dsSub) }
                     .buttonStyle(.plain)
             }
 
@@ -127,7 +166,7 @@ struct CardDetailScreen: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
-                PrimaryButton(title: "저장") { router.pop() }
+                PrimaryButton(title: "저장") { save() }
             }
             .padding(.horizontal, 48)
             .frame(width: DS.width, height: 104)
@@ -158,7 +197,7 @@ extension CardDetailScreen {
         let segment = (inner - 8 - 4) / 3
         return NarrowPage(backTitle: "결과", barTitle: "카드 수정", onBack: { router.pop() },
                           trailing: {
-            Button { router.pop() } label: { Text("삭제").ds(17, .medium, .dsSub) }
+            Button { confirmingDelete = true } label: { Text("삭제").ds(17, .medium, .dsSub) }
                 .buttonStyle(.plain)
         }, content: {
             // 원본에서 가져온 부분
@@ -252,7 +291,7 @@ extension CardDetailScreen {
                 } label: { Text("원래대로 되돌리기").ds(15, .medium, .dsSub) }
                 .buttonStyle(.plain)
                 Spacer()
-                PrimaryButton(title: "저장", width: inner < 440 ? 130 : 200) { router.pop() }
+                PrimaryButton(title: "저장", width: inner < 440 ? 130 : 200) { save() }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)

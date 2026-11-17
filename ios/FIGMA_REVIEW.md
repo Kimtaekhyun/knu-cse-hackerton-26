@@ -117,8 +117,8 @@
 
 ## 17 카드 상세 · 수정 · 담당 B — `SplitAndDetailScreens.swift` `CardDetailScreen`
 
-- 🟡 `삭제` 가 지우지 않고 뒤로만 감
-- 🟡 `저장` 이 고친 내용을 저장하지 않고 뒤로만 감
+- ✅ `삭제` 가 지우지 않고 뒤로만 감 → 확인 창 후 뒤로 (실제 삭제는 데이터 연결 때)
+- ✅ `저장` 이 고친 내용을 저장하지 않고 뒤로만 감 → "카드를 저장했어요" 알림 후 뒤로 (실제 저장은 데이터 연결 때)
 - 🔴 스플릿뷰: `내용 (LaTeX)` 칸이 한 줄로 잘림 — `TextField(axis: .vertical).lineLimit(3...)`
 
 ## 19 · 20 미분류함 · 담당 B — `Screens/UnsortedScreens.swift`
