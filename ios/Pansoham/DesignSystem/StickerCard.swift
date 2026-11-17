@@ -1,6 +1,6 @@
 //
 //  StickerCard.swift
-//  판서함
+//  chalkdrop
 //
 //  v2/Sticker Card — 판서에서 찾아낸 카드 한 장
 //

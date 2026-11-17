@@ -1,6 +1,6 @@
 //
 //  SubjectScreens.swift
-//  판서함
+//  chalkdrop
 //
 //  15 과목 상세 · 수업별 / 16 과목 상세 · 카드 모아 보기
 //
@@ -18,7 +18,7 @@ struct FolderNavBar<MenuItems: View>: View {
     var canSearch: Bool
     let menu: MenuItems
 
-    init(backTitle: String = "판서함", onBack: @escaping () -> Void = {},
+    init(backTitle: String = "chalkdrop", onBack: @escaping () -> Void = {},
          searching: Binding<Bool> = .constant(false), query: Binding<String> = .constant(""),
          canSearch: Bool = true, @ViewBuilder menu: () -> MenuItems) {
         self.backTitle = backTitle
@@ -469,7 +469,7 @@ struct SubjectEmptyScreen: View {
 
 extension SubjectLessonsScreen {
     func narrow(_ size: CGSize) -> some View {
-        NarrowPage(backTitle: "판서함", onBack: { router.popTo(.home) },
+        NarrowPage(backTitle: "chalkdrop", onBack: { router.popTo(.home) },
                    title: "자료구조", detail: "월 10:30–12:00 · 판서 12장 · 카드 34개",
                    trailing: {
             FolderActions(onSearch: { searching = true }) {
@@ -536,7 +536,7 @@ extension SubjectCardsScreen {
         let inner = size.width - 40
         let columnCount = inner >= 520 ? 2 : 1
         let cardWidth = (inner - 12 * CGFloat(columnCount - 1)) / CGFloat(columnCount)
-        return NarrowPage(backTitle: "판서함", onBack: { router.popTo(.home) },
+        return NarrowPage(backTitle: "chalkdrop", onBack: { router.popTo(.home) },
                           title: "자료구조", detail: "월 10:30–12:00 · 판서 12장 · 카드 34개",
                           trailing: {
             FolderActions(onSearch: { searching = true }) {
@@ -630,7 +630,7 @@ extension SubjectCardsScreen {
 
 extension SubjectEmptyScreen {
     func narrow(_ size: CGSize) -> some View {
-        NarrowPage(backTitle: "판서함", onBack: { router.pop() },
+        NarrowPage(backTitle: "chalkdrop", onBack: { router.pop() },
                    title: "운영체제", detail: "금 10:30–12:00 · 판서 0장",
                    trailing: { FolderActions(canSearch: false) { FolderMenu(router: router) } }, content: {
             NarrowModeToggle(mode: 0)

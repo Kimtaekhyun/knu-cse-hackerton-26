@@ -1,6 +1,6 @@
 //
 //  ResultScreens.swift
-//  판서함
+//  chalkdrop
 //
 //  12 결과 · 13 복사 완료
 //

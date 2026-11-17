@@ -1,6 +1,6 @@
 //
 //  ProcessingScreen.swift
-//  판서함
+//  chalkdrop
 //
 //  10-1~3 처리 중 (판서 펴기 → 글씨 찾기 → 수식 정리)
 //

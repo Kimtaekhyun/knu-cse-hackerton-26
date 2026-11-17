@@ -1,6 +1,6 @@
 //
 //  LoginScreen.swift
-//  판서함
+//  chalkdrop
 //
 //  04 로그인
 //
@@ -26,10 +26,7 @@ struct LoginScreen: View {
                         .resizable()
                         .frame(width: 96, height: 96)
                         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                        // 로고 배경이 검은 면과 같은 색이라 테두리로 모양을 보여 줘요.
-                        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .stroke(Color.white.opacity(0.18), lineWidth: 1))
-                    Text("판서함").ds(44, .bold, .white)
+                    Text("chalkdrop").ds(44, .bold, .white)
                     Text("찍으면 정리되는 판서 노트").ds(17, .regular, .dsSub)
                 }
                 .frame(width: 597)
@@ -89,9 +86,7 @@ extension LoginScreen {
                     .resizable()
                     .frame(width: 80, height: 80)
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1))
-                Text("판서함").ds(34, .bold, .white)
+                Text("chalkdrop").ds(34, .bold, .white)
                 Text("찍으면 정리되는 판서 노트").ds(15, .regular, .dsSub)
             }
             .frame(maxWidth: .infinity)

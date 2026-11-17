@@ -1,6 +1,6 @@
 //
 //  Clipboard.swift
-//  판서함
+//  chalkdrop
 //
 //  글자를 클립보드에 복사
 //

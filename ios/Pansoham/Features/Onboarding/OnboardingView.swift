@@ -1,6 +1,6 @@
 //
 //  OnboardingView.swift
-//  판서함
+//  chalkdrop
 //
 //  피그마 "키타가와 마린" 페이지의 01~03 온보딩 화면을 SwiftUI로 옮긴 파일.
 //  사용법:  OnboardingView { /* 끝났을 때 할 일 (예: 로그인 화면으로 이동) */ }
@@ -258,10 +258,10 @@ private struct MoveIllustration: View {
 
     private func content(_ t: Double) -> some View {
         ZStack(alignment: .topLeading) {
-            // 왼쪽: 판서함
+            // 왼쪽: chalkdrop
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white)
-                miniTitle("판서함").place(x: 18, y: 16)
+                miniTitle("chalkdrop").place(x: 18, y: 16)
                 noteBlock(first: 150, second: 90).place(x: 18, y: 48)
                 noteBlock(first: 120, second: 90).place(x: 18, y: 136)
             }

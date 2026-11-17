@@ -1,6 +1,6 @@
 //
 //  PendingScreen.swift
-//  판서함
+//  chalkdrop
 //
 //  아직 옮기지 않은 판서 전체 목록.
 //  피그마에는 없는 화면이라 메인(08)의 "아직 옮기지 않은 판서" 카드 모양을 크게 늘려 만들었어요.
@@ -41,7 +41,7 @@ struct PendingScreen: View {
 
     private var wide: some View {
         DesignCanvas {
-            NavBar(backTitle: "판서함", title: "", onBack: { router.pop() })
+            NavBar(backTitle: "chalkdrop", title: "", onBack: { router.pop() })
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(title).ds(34, .bold)
@@ -59,7 +59,7 @@ struct PendingScreen: View {
     // MARK: 좁은 화면 (스플릿 뷰)
 
     private func narrow(_ size: CGSize) -> some View {
-        NarrowPage(backTitle: "판서함", onBack: { router.pop() }, title: title, detail: detail,
+        NarrowPage(backTitle: "chalkdrop", onBack: { router.pop() }, title: title, detail: detail,
                    trailing: { EmptyView() }, content: {
             VStack(spacing: 12) {
                 ForEach(notes) { note in row(note, width: size.width - 40) }
