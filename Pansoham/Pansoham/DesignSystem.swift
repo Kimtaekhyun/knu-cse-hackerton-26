@@ -263,11 +263,14 @@ enum Screen: String, Hashable, CaseIterable {
     case subjectLessons, subjectCards, subjectEmpty
     case unsorted, unsortedMove
     case allSemesters, pastSemester, account
+    case pending
 }
 
 @Observable
 final class Router {
     var stack: [Screen] = [.onboarding]
+    /// 시간표 업로드(05)에서 고른 캡처. 시간표 확인(06)에서 원본으로 보여 줘요.
+    var timetableImage: UIImage?
 
     init() {
         // 특정 화면부터 열어 보기: 실행 인자에 `-startScreen home` 처럼 화면 이름을 넣어요.

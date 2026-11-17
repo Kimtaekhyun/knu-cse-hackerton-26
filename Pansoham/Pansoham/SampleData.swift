@@ -9,8 +9,8 @@ import Foundation
 
 struct TimetableSubject: Identifiable, Hashable {
     let id = UUID()
-    let name: String
-    let time: String
+    var name: String
+    var time: String
 }
 
 enum SampleData {

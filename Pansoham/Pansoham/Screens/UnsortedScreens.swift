@@ -32,6 +32,9 @@ struct UnsortedScreen: View {
     ]
     @State private var moving: Item?
     @State private var target = "자료구조"
+    @State private var searching = false
+    @State private var query = ""
+    private var shownItems: [Item] { items.filter { matches(query, [$0.date, $0.detail]) } }
 
     private let subjects = SampleData.timetable.map(\.name)
 
@@ -41,13 +44,16 @@ struct UnsortedScreen: View {
 
     private var wide: some View {
         DesignCanvas {
-            FolderNavBar(onBack: { router.popTo(.home) })
+            FolderNavBar(onBack: { router.popTo(.home) }, searching: $searching, query: $query) {
+                FolderMenu(router: router)
+            }
             SubjectHeader(name: "미분류함",
                           detail: "시간표 밖에서 찍은 판서 \(items.count)장 · 과목으로 옮겨 정리하세요")
 
             // 미분류 목록
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(items) { item in
+                if shownItems.isEmpty && !items.isEmpty { NoSearchResult(query: query) }
+                ForEach(shownItems) { item in
                     HStack(spacing: 20) {
                         LessonThumb(x: item.x, y: item.y)
                         VStack(alignment: .leading, spacing: 6) {
@@ -157,13 +163,12 @@ extension UnsortedScreen {
                    title: "미분류함",
                    detail: "시간표 밖에서 찍은 판서 \(items.count)장 · 과목으로 옮겨 정리하세요",
                    trailing: {
-            HStack(spacing: 20) {
-                Image("search-24")
-                Image("more-24")
-            }
+            FolderActions(onSearch: { searching = true }) { FolderMenu(router: router) }
         }, content: {
+            if searching { FolderSearchField(text: $query) { searching = false; query = "" } }
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(items) { item in
+                if shownItems.isEmpty && !items.isEmpty { NoSearchResult(query: query) }
+                ForEach(shownItems) { item in
                     HStack(alignment: .top, spacing: 14) {
                         LessonThumb(x: item.x, y: item.y).scaledBox(168, 112, to: 120)
                         VStack(alignment: .leading, spacing: 6) {

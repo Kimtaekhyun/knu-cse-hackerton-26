@@ -26,7 +26,10 @@ struct LoginScreen: View {
                         .resizable()
                         .frame(width: 96, height: 96)
                         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                    Text("앱 이름").ds(44, .bold, .white)
+                        // 로고 배경이 검은 면과 같은 색이라 테두리로 모양을 보여 줘요.
+                        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .stroke(Color.white.opacity(0.18), lineWidth: 1))
+                    Text("판서함").ds(44, .bold, .white)
                     Text("찍으면 정리되는 판서 노트").ds(17, .regular, .dsSub)
                 }
                 .frame(width: 597)
@@ -78,7 +81,10 @@ struct LoginScreen: View {
 
 struct TimetableUploadScreen: View {
     @Environment(Router.self) private var router
-    @State private var picked = false
+    @State private var showPicker = false
+    @State private var dropTargeted = false
+    private var picked: Bool { router.timetableImage != nil }
+    private func pick(_ image: UIImage) { router.timetableImage = image }
 
     private let steps = [
         "에브리타임 앱에서 시간표 탭 열기",
@@ -88,6 +94,7 @@ struct TimetableUploadScreen: View {
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
+            .imagePicker(isPresented: $showPicker, onPick: pick)
     }
 
     private var wide: some View {
@@ -127,24 +134,23 @@ struct TimetableUploadScreen: View {
 
             // 업로드 영역
             VStack(spacing: 0) {
-                Image("plus-28")
-                    .frame(width: 72, height: 72)
-                    .background(Color.white)
-                    .clipShape(Circle())
+                pickedPreview(empty: 72, maxSize: CGSize(width: 360, height: 260))
                 Color.clear.frame(width: 1, height: 24)
                 Text(picked ? "시간표 캡처 1장을 골랐어요" : "시간표 캡처를 여기에 끌어다 놓으세요").ds(20, .bold)
                 Color.clear.frame(width: 1, height: 8)
                 Text("PNG, JPG · 한 장").ds(15, .regular, .dsSub)
                 Color.clear.frame(width: 1, height: 28)
-                SecondaryButton(title: picked ? "다른 이미지 선택" : "사진 앨범에서 선택") { picked = true }
+                SecondaryButton(title: picked ? "다른 이미지 선택" : "사진 앨범에서 선택") { showPicker = true }
             }
             .frame(width: 527, height: 586)
-            .background(Color.dsPanel)
+            .background(dropTargeted ? Color.dsBlueSoft : Color.dsPanel)
             .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 32, style: .continuous)
-                    .stroke(Color.black.opacity(0.14), style: StrokeStyle(lineWidth: 1.5, dash: [6, 6]))
+                    .stroke(dropTargeted ? Color.dsBlue : Color.black.opacity(0.14), style: StrokeStyle(lineWidth: 1.5, dash: [6, 6]))
             )
+            .contentShape(Rectangle())
+            .imageDrop(isTargeted: $dropTargeted, onDrop: pick)
             .at(619, 112)
 
             BottomBar(caption: picked ? "이미지 1장 선택됨" : "선택된 이미지 없음") {
@@ -154,6 +160,23 @@ struct TimetableUploadScreen: View {
             }
         }
     }
+
+    /// 고른 캡처 미리보기. 아직 없으면 + 동그라미.
+    @ViewBuilder
+    func pickedPreview(empty: CGFloat, maxSize: CGSize) -> some View {
+        if let image = router.timetableImage {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: maxSize.width, maxHeight: maxSize.height)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else {
+            Image("plus-28")
+                .frame(width: empty, height: empty)
+                .background(Color.white)
+                .clipShape(Circle())
+        }
+    }
 }
 
 // MARK: - 06 시간표 확인
@@ -161,11 +184,22 @@ struct TimetableUploadScreen: View {
 struct TimetableConfirmScreen: View {
     @Environment(Router.self) private var router
     @State private var subjects = SampleData.timetable
+    /// 고치는 중인 과목 (nil 이면 새 과목 추가)
+    @State private var editingID: UUID?
+    @State private var showEditor = false
+    @State private var draftName = ""
+    @State private var draftTime = ""
 
     private let days = ["월", "화", "수", "목", "금"]
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
+            .alert(editingID == nil ? "과목 추가" : "과목 고치기", isPresented: $showEditor) {
+                TextField("과목 이름", text: $draftName)
+                TextField("요일 · 시간 (예: 월 10:30–12:00)", text: $draftTime)
+                Button("취소", role: .cancel) {}
+                Button(editingID == nil ? "추가" : "저장") { saveDraft() }
+            }
     }
 
     private var wide: some View {
@@ -189,6 +223,12 @@ struct TimetableConfirmScreen: View {
                 block(x: 136, y: 46, opacity: 1)
                 block(x: 186, y: 306, opacity: 0.85)
                 block(x: 236, y: 98, opacity: 1)
+                // 05 에서 고른 캡처가 있으면 그걸 보여 줘요.
+                if let image = router.timetableImage {
+                    Color.dsPanel
+                    Image(uiImage: image).resizable().scaledToFit()
+                        .frame(width: 300, height: 452)
+                }
             }
             .frame(width: 300, height: 452, alignment: .topLeading)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -198,11 +238,17 @@ struct TimetableConfirmScreen: View {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(subjects) { subject in
                     HStack(spacing: 14) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(subject.name).ds(17, .bold)
-                            Text(subject.time).ds(15, .regular, .dsSub)
+                        Button { edit(subject) } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(subject.name).ds(17, .bold)
+                                    Text(subject.time).ds(15, .regular, .dsSub)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .contentShape(Rectangle())
                         }
-                        Spacer(minLength: 0)
+                        .buttonStyle(.plain)
                         Button {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 subjects.removeAll { $0.id == subject.id }
@@ -220,7 +266,7 @@ struct TimetableConfirmScreen: View {
                 }
 
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { subjects = SampleData.timetable }
+                    edit(nil)
                 } label: {
                     HStack(spacing: 10) {
                         Image("plus-20")
@@ -250,6 +296,27 @@ struct TimetableConfirmScreen: View {
             .frame(width: 44, height: 66)
             .at(x, y)
     }
+
+    /// 과목 고치기 (nil 이면 새로 추가)
+    func edit(_ subject: TimetableSubject?) {
+        editingID = subject?.id
+        draftName = subject?.name ?? ""
+        draftTime = subject?.time ?? ""
+        showEditor = true
+    }
+
+    private func saveDraft() {
+        let name = draftName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if let id = editingID, let i = subjects.firstIndex(where: { $0.id == id }) {
+                subjects[i].name = name
+                subjects[i].time = draftTime
+            } else {
+                subjects.append(TimetableSubject(name: name, time: draftTime))
+            }
+        }
+    }
 }
 
 // MARK: - 좁은 화면 (스플릿 뷰)
@@ -264,7 +331,9 @@ extension LoginScreen {
                     .resizable()
                     .frame(width: 80, height: 80)
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                Text("앱 이름").ds(34, .bold, .white)
+                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 1))
+                Text("판서함").ds(34, .bold, .white)
                 Text("찍으면 정리되는 판서 노트").ds(15, .regular, .dsSub)
             }
             .frame(maxWidth: .infinity)
@@ -321,10 +390,7 @@ extension TimetableUploadScreen {
 
             // 업로드 영역
             VStack(spacing: 0) {
-                Image("plus-28")
-                    .frame(width: 64, height: 64)
-                    .background(Color.white)
-                    .clipShape(Circle())
+                pickedPreview(empty: 64, maxSize: CGSize(width: inner - 48, height: 220))
                 Color.clear.frame(width: 1, height: 18)
                 Text(picked ? "시간표 캡처 1장을 골랐어요" : "시간표 캡처를 여기에 끌어다 놓으세요")
                     .dsWrap(18, .bold)
@@ -332,17 +398,18 @@ extension TimetableUploadScreen {
                 Color.clear.frame(width: 1, height: 6)
                 Text("PNG, JPG · 한 장").ds(14, .regular, .dsSub)
                 Color.clear.frame(width: 1, height: 20)
-                SecondaryButton(title: picked ? "다른 이미지 선택" : "사진 앨범에서 선택", width: min(220, inner - 48)) { picked = true }
+                SecondaryButton(title: picked ? "다른 이미지 선택" : "사진 앨범에서 선택", width: min(220, inner - 48)) { showPicker = true }
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 36)
             .frame(width: inner)
-            .background(Color.dsPanel)
+            .background(dropTargeted ? Color.dsBlueSoft : Color.dsPanel)
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(Color.black.opacity(0.14), style: StrokeStyle(lineWidth: 1.5, dash: [6, 6]))
+                    .stroke(dropTargeted ? Color.dsBlue : Color.black.opacity(0.14), style: StrokeStyle(lineWidth: 1.5, dash: [6, 6]))
             )
+            .imageDrop(isTargeted: $dropTargeted, onDrop: pick)
 
             Text("에브리타임은 공식 연동이 없어서 캡처 이미지로 시간표를 읽어요.").dsWrap(13, .regular, .dsSub)
         }, bottom: {
@@ -373,6 +440,12 @@ extension TimetableConfirmScreen {
                 block(x: 136, y: 46, opacity: 1)
                 block(x: 186, y: 306, opacity: 0.85)
                 block(x: 236, y: 98, opacity: 1)
+                // 05 에서 고른 캡처가 있으면 그걸 보여 줘요.
+                if let image = router.timetableImage {
+                    Color.dsPanel
+                    Image(uiImage: image).resizable().scaledToFit()
+                        .frame(width: 300, height: 452)
+                }
             }
             .frame(width: 300, height: 452, alignment: .topLeading)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -382,11 +455,17 @@ extension TimetableConfirmScreen {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(subjects) { subject in
                     HStack(spacing: 14) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(subject.name).ds(17, .bold)
-                            Text(subject.time).ds(15, .regular, .dsSub)
+                        Button { edit(subject) } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(subject.name).ds(17, .bold)
+                                    Text(subject.time).ds(15, .regular, .dsSub)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .contentShape(Rectangle())
                         }
-                        Spacer(minLength: 0)
+                        .buttonStyle(.plain)
                         Button {
                             withAnimation(.easeInOut(duration: 0.2)) { subjects.removeAll { $0.id == subject.id } }
                         } label: { Image("minus-circle-28") }
@@ -397,7 +476,7 @@ extension TimetableConfirmScreen {
                     .overlay(alignment: .bottom) { Rectangle().fill(Color.dsLine).frame(height: 1) }
                 }
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { subjects = SampleData.timetable }
+                    edit(nil)
                 } label: {
                     HStack(spacing: 10) {
                         Image("plus-20")
