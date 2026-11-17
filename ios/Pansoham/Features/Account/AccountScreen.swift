@@ -13,9 +13,6 @@ struct AccountScreen: View {
     @State private var pendingAlert = true
     @AppStorage("profileName") private var name = "김마린"
     @AppStorage("profileSchool") private var school = "경북대학교"
-    /// 촬영 화면이 처음 열릴 때 고를 값 (0 빔 화면 · 1 칠판 / 0 빨간 펜 · 1 검은 펜)
-    @AppStorage(CaptureDefaults.modeKey) private var captureMode = 0
-    @AppStorage(CaptureDefaults.penKey) private var penColor = 0
     @State private var editingProfile = false
     @State private var draftName = ""
     @State private var draftSchool = ""
@@ -52,18 +49,13 @@ struct AccountScreen: View {
         }
     }
 
-    /// 설정 묶음 네 개
+    /// 설정 묶음 세 개
     private func settings(_ width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 22) {
             group("학기", width) {
                 row("현재 학기", value: "2026년 2학기", chevron: true) { router.push(.allSemesters) }
                 divider
                 row("시간표 수정", chevron: true) { router.push(.timetableConfirm) }
-            }
-            group("촬영", width) {
-                pickerRow("기본 촬영 모드", options: CaptureDefaults.modes, selection: $captureMode)
-                divider
-                pickerRow("기본 펜 색", options: CaptureDefaults.pens, selection: $penColor)
             }
             group("알림", width) {
                 toggleRow("수업 시작 알림", isOn: $classAlert)
@@ -155,27 +147,6 @@ struct AccountScreen: View {
                 HStack(spacing: 4) {
                     if let value { Text(value).ds(16, .regular, .dsSub) }
                     if chevron { Image("chevron-right-18") }
-                }
-            }
-            .padding(.vertical, 13)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    /// 누르면 고를 수 있는 메뉴가 뜨는 줄 (오른쪽에 지금 값)
-    private func pickerRow(_ title: String, options: [String], selection: Binding<Int>) -> some View {
-        Menu {
-            Picker(title, selection: selection) {
-                ForEach(options.indices, id: \.self) { Text(options[$0]).tag($0) }
-            }
-        } label: {
-            HStack {
-                Text(title).ds(16, .medium)
-                Spacer()
-                HStack(spacing: 4) {
-                    Text(options[min(selection.wrappedValue, options.count - 1)]).ds(16, .regular, .dsSub)
-                    Image("chevron-right-18")
                 }
             }
             .padding(.vertical, 13)
