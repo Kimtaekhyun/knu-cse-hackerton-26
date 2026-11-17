@@ -3,6 +3,9 @@
 Team repository for the Kyungpook National University School of Computer Science and Engineering hackathon (development period until 2026-11-24 12:00). Theme: services that CSE students need.
 
 ## Structure
+- `ios/` — iPadOS SwiftUI app (`Pansoham.xcodeproj`). Sources are under `ios/Pansoham/`: `App/` (entry, routing), `Features/<screen group>/`, `Core/`, `DesignSystem/`. The project syncs the folder, so new files need no project edits.
+- `server/` — FastAPI backend (skeleton only for now)
+- `docs/` — Design documents
 - `experiments/`, `samples/` — Experiment scripts and samples. Work on them **only on the test branch**; do not push them to main. Not subject to lint.
 - `.venv/` — Local virtual environment (never commit)
 
