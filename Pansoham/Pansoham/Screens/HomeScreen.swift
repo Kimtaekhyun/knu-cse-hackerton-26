@@ -353,6 +353,7 @@ extension HomeScreen {
             }
             .padding(.horizontal, 20)
             .frame(height: 60)
+            .avoidsWindowControls()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {

@@ -8,14 +8,23 @@
 
 import SwiftUI
 
-/// 창이 가로로 넓으면 `wide`, 세로로 길면 `narrow` 를 보여 줘요.
+extension DS {
+    /// 창이 기준 화면(1194 × 834)보다 가로로 좁아졌는지.
+    /// 좁아지면 화면 전체를 줄이는 대신, 실제 크기 그대로 너비에 맞춰 다시 배치하는 화면을 써요.
+    /// (가로가 10% 넘게 모자랄 때부터. 아이패드 전체 화면은 어느 기종이든 넓은 쪽이에요.)
+    static func isNarrow(_ size: CGSize) -> Bool {
+        size.width / width < size.height / height * 0.9
+    }
+}
+
+/// 창이 가로로 넉넉하면 `wide`, 가로가 좁아지면 `narrow` 를 보여 줘요.
 struct Adaptive<Wide: View, Narrow: View>: View {
     @ViewBuilder var wide: () -> Wide
     @ViewBuilder var narrow: (CGSize) -> Narrow
 
     var body: some View {
         GeometryReader { geo in
-            if geo.size.width < geo.size.height {
+            if DS.isNarrow(geo.size) {
                 narrow(geo.size)
             } else {
                 wide()
@@ -35,6 +44,11 @@ extension Text {
 }
 
 extension View {
+    /// 창 왼쪽 위의 창 조절 버튼(빨강 · 노랑 · 초록)에 가려지지 않게 위 막대를 그 오른쪽으로 좁혀요.
+    func avoidsWindowControls() -> some View {
+        containerCornerOffset(.leading, sizeToFit: true)
+    }
+
     /// 크기가 정해진(w × h) 조각을 `width` 너비에 맞게 통째로 줄이거나 늘려요.
     func scaledBox(_ w: CGFloat, _ h: CGFloat, to width: CGFloat) -> some View {
         let scale = width / w
@@ -75,6 +89,7 @@ struct NarrowPage<Trailing: View, Content: View, Bottom: View>: View {
                 }
                 .padding(.leading, 12)
                 .padding(.trailing, 20)
+                .avoidsWindowControls()
             }
             .frame(height: 52)
 
