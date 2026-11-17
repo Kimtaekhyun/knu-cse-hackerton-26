@@ -167,59 +167,63 @@ struct TimetableConfirmScreen: View {
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .at(48, 210)
 
-            // 시간표 목록
-            VStack(alignment: .leading, spacing: 0) {
-                if load == .loaded {
-                    if subjects.isEmpty {
-                        Text("과목을 찾지 못했어요. 과목 추가로 직접 넣어 주세요.").ds(15, .regular, .dsSub).padding(.vertical, 14)
-                    }
-                    ForEach(subjects) { subject in
-                        HStack(spacing: 14) {
-                            Button { edit(subject) } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(subject.name).ds(17, .bold)
-                                        Text(subject.time).ds(15, .regular, .dsSub)
+            // 시간표 목록. 과목이 많으면 아래 막대(y 730) 위까지만 보이고 스크롤돼요.
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    if load == .loaded {
+                        if subjects.isEmpty {
+                            Text("과목을 찾지 못했어요. 과목 추가로 직접 넣어 주세요.").ds(15, .regular, .dsSub).padding(.vertical, 14)
+                        }
+                        ForEach(subjects) { subject in
+                            HStack(spacing: 14) {
+                                Button { edit(subject) } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(subject.name).ds(17, .bold)
+                                            Text(subject.time).ds(15, .regular, .dsSub)
+                                        }
+                                        Spacer(minLength: 0)
                                     }
-                                    Spacer(minLength: 0)
+                                    .contentShape(Rectangle())
                                 }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    subjects.removeAll { $0.id == subject.id }
+                                .buttonStyle(.plain)
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        subjects.removeAll { $0.id == subject.id }
+                                    }
+                                } label: {
+                                    Image("minus-circle-28")
                                 }
-                            } label: {
-                                Image("minus-circle-28")
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
+                            .padding(.vertical, 14)
+                            .frame(width: 766)
+                            .overlay(alignment: .bottom) {
+                                Rectangle().fill(Color.dsLine).frame(height: 1)
+                            }
                         }
-                        .padding(.vertical, 14)
-                        .frame(width: 766)
-                        .overlay(alignment: .bottom) {
-                            Rectangle().fill(Color.dsLine).frame(height: 1)
-                        }
-                    }
 
-                    Button {
-                        edit(nil)
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image("plus-20")
-                            Text("과목 추가").ds(17, .bold)
+                        Button {
+                            edit(nil)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image("plus-20")
+                                Text("과목 추가").ds(17, .bold)
+                            }
+                            .padding(.vertical, 20)
+                            .contentShape(Rectangle())
                         }
-                        .padding(.vertical, 20)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                        .buttonStyle(.plain)
 
-                    Text("시간이 정해지지 않은 과목(사이버강의 등)은 미분류함에서 직접 옮겨요.")
-                        .ds(14, .regular, .dsSub)
-                } else {
-                    statusView(width: 766)
+                        Text("시간이 정해지지 않은 과목(사이버강의 등)은 미분류함에서 직접 옮겨요.")
+                            .ds(14, .regular, .dsSub)
+                    } else {
+                        statusView(width: 766)
+                    }
                 }
+                .padding(.bottom, 24)
             }
+            .frame(width: 766, height: 730 - 210, alignment: .topLeading)
             .at(380, 210)
 
             BottomBar(caption: caption) {
