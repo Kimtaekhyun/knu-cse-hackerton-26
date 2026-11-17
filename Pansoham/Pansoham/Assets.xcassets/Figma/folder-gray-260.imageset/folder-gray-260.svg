@@ -1,0 +1,10 @@
+<svg width="260" height="166" viewBox="0 0 260 166" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="folder bg" clip-path="url(#clip0_0_49)">
+<path id="folder" d="M0 18C0 6 6.61017 0 19.8305 0H88.1356C95.4802 0 101.356 2.66667 105.763 8L112.373 16H240.169C253.39 16 260 22 260 34V148C260 160 253.39 166 240.169 166H19.8305C6.61017 166 0 160 0 148V18Z" fill="black" fill-opacity="0.05"/>
+</g>
+<defs>
+<clipPath id="clip0_0_49">
+<rect width="260" height="166" fill="white"/>
+</clipPath>
+</defs>
+</svg>
