@@ -44,6 +44,10 @@ final class Router {
     }
     /// 처음부터 다시 쌓기
     func reset(to screen: Screen) { stack = [screen] }
+    /// 시간표 확인(06)의 "다시 올리기": 업로드(05)에서 왔으면 뒤로, 내 계정 등에서 바로 왔으면 업로드 화면으로 바꿔요.
+    func backToUpload() {
+        if stack.dropLast().last == .timetableUpload { pop() } else { replace(.timetableUpload) }
+    }
     /// 쌓인 화면 중 가장 가까운 `screen` 까지 돌아가기. 없으면 새로 시작.
     func popTo(_ screen: Screen) {
         if let i = stack.lastIndex(of: screen) { stack = Array(stack[...i]) } else { stack = [screen] }
