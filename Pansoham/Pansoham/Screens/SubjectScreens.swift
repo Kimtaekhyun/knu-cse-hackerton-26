@@ -9,19 +9,125 @@ import SwiftUI
 
 // MARK: - 과목 화면 공통 (위 막대 + 제목 + 보기 전환)
 
-/// 뒤로 · 검색 · 더 보기가 있는 위 막대
-struct FolderNavBar: View {
-    var backTitle = "판서함"
-    var onBack: () -> Void = {}
+/// 뒤로 · 검색 · 더 보기가 있는 위 막대. 검색 중이면 검색창으로 바뀌어요.
+struct FolderNavBar<MenuItems: View>: View {
+    var backTitle: String
+    var onBack: () -> Void
+    @Binding var searching: Bool
+    @Binding var query: String
+    var canSearch: Bool
+    let menu: MenuItems
+
+    init(backTitle: String = "판서함", onBack: @escaping () -> Void = {},
+         searching: Binding<Bool> = .constant(false), query: Binding<String> = .constant(""),
+         canSearch: Bool = true, @ViewBuilder menu: () -> MenuItems) {
+        self.backTitle = backTitle
+        self.onBack = onBack
+        self._searching = searching
+        self._query = query
+        self.canSearch = canSearch
+        self.menu = menu()
+    }
 
     var body: some View {
-        NavBar(backTitle: backTitle, title: "", onBack: onBack) {
-            HStack(spacing: 24) {
-                Image("search-24")
-                Image("more-24")
+        if searching {
+            FolderSearchField(text: $query) { searching = false; query = "" }
+                .padding(.horizontal, 48)
+                .frame(width: DS.width, height: 56)
+                .background(Color.white)
+                .at(0, 24)
+        } else {
+            NavBar(backTitle: backTitle, title: "", onBack: onBack) {
+                FolderActions(spacing: 24, canSearch: canSearch, onSearch: { searching = true }) { menu }
             }
         }
     }
+}
+
+/// 위 막대 오른쪽의 검색 · 더 보기 버튼
+struct FolderActions<MenuItems: View>: View {
+    var spacing: CGFloat = 20
+    var canSearch = true
+    var onSearch: () -> Void = {}
+    @ViewBuilder var menu: MenuItems
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            if canSearch {
+                Button(action: onSearch) { Image("search-24") }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("검색")
+            }
+            Menu { menu } label: { Image("more-24") }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .accessibilityLabel("더 보기")
+        }
+    }
+}
+
+/// 검색창 (돋보기 · 입력 · 지우기 · 취소)
+struct FolderSearchField: View {
+    @Binding var text: String
+    var onCancel: () -> Void
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image("search-24")
+                TextField("검색", text: $text)
+                    .font(.system(size: 17))
+                    .focused($focused)
+                    .submitLabel(.search)
+                if !text.isEmpty {
+                    Button { text = "" } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(Color.dsSub)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+            .background(Color.black.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            Button(action: onCancel) { Text("취소").ds(17, .medium) }
+                .buttonStyle(.plain)
+        }
+        .onAppear { focused = true }
+    }
+}
+
+/// 검색 결과가 없을 때
+struct NoSearchResult: View {
+    let query: String
+    var body: some View {
+        Text("‘\(query)’ 검색 결과가 없어요").ds(17, .medium, .dsSub)
+            .padding(.vertical, 24)
+    }
+}
+
+/// 과목 · 미분류함 더 보기 메뉴
+struct FolderMenu: View {
+    let router: Router
+    /// 보기 전환 (예: ("카드 모아 보기", .subjectCards)). 없으면 빼요.
+    var switchTo: (title: String, screen: Screen)? = nil
+
+    var body: some View {
+        Button { router.push(.capture) } label: { Label("판서 찍기", systemImage: "camera") }
+        if let switchTo {
+            Button { router.replace(switchTo.screen) } label: {
+                Label(switchTo.title, systemImage: "rectangle.grid.1x2")
+            }
+        }
+        Button { router.push(.allSemesters) } label: { Label("전체 학기", systemImage: "folder") }
+    }
+}
+
+/// 검색어가 글자들 중 하나에 들어 있는지 (빈 검색어면 모두 통과)
+func matches(_ query: String, _ fields: [String]) -> Bool {
+    let q = query.trimmingCharacters(in: .whitespaces)
+    return q.isEmpty || fields.contains { $0.localizedCaseInsensitiveContains(q) }
 }
 
 /// 과목 이름 · 설명 · (수업별 | 카드 모아 보기)
@@ -123,6 +229,10 @@ struct SubjectLessonsScreen: View {
         var more: String? = nil
     }
 
+    @State private var searching = false
+    @State private var query = ""
+    private var shownLessons: [Lesson] { lessons.filter { matches(query, [$0.date] + $0.tags) } }
+
     private let lessons: [Lesson] = [
         .init(id: 0, date: "11월 17일 (월)", summary: "사진 2장 · 카드 5개", today: true,
               thumbs: [(-0.3333, -0.5629), (-0.0333, -0.8443)],
@@ -141,7 +251,9 @@ struct SubjectLessonsScreen: View {
 
     private var wide: some View {
         DesignCanvas {
-            FolderNavBar(onBack: { router.popTo(.home) })
+            FolderNavBar(onBack: { router.popTo(.home) }, searching: $searching, query: $query) {
+                FolderMenu(router: router, switchTo: ("카드 모아 보기", .subjectCards))
+            }
             SubjectHeader(name: "자료구조", detail: "월 10:30–12:00 · 판서 12장 · 카드 34개", mode: 0) { mode in
                 if mode == 1 { router.replace(.subjectCards) }
             }
@@ -149,7 +261,8 @@ struct SubjectLessonsScreen: View {
             // 수업 목록
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(lessons) { lesson in
+                    if shownLessons.isEmpty { NoSearchResult(query: query) }
+                    ForEach(shownLessons) { lesson in
                         Button { router.push(.result) } label: { row(lesson) }
                             .buttonStyle(.plain)
                     }
@@ -216,12 +329,15 @@ struct SubjectCardsScreen: View {
     @State private var filter = "전체"
     @State private var selection: Set<Int> = [1, 2, 3]
     @State private var copiedCount: Int?     // 좁은 화면에서 방금 복사한 카드 수
+    @State private var searching = false
+    @State private var query = ""
 
     private let all = SampleData.subjectStickers
     private let filters: [(name: String, count: Int)] = [("전체", 34), ("수식", 9), ("코드", 6), ("텍스트", 19)]
 
     private var visible: [Sticker] {
-        filter == "전체" ? all : all.filter { $0.kind == filter }
+        (filter == "전체" ? all : all.filter { $0.kind == filter })
+            .filter { matches(query, [$0.title, $0.text]) }
     }
 
     /// 카드를 세 줄에 차례로 나눠 담아요 (1·4·7 / 2·5·8 / 3·6·9).
@@ -237,7 +353,9 @@ struct SubjectCardsScreen: View {
 
     private var wide: some View {
         DesignCanvas {
-            FolderNavBar(onBack: { router.popTo(.home) })
+            FolderNavBar(onBack: { router.popTo(.home) }, searching: $searching, query: $query) {
+                FolderMenu(router: router, switchTo: ("수업별로 보기", .subjectLessons))
+            }
             SubjectHeader(name: "자료구조", detail: "월 10:30–12:00 · 판서 12장 · 카드 34개", mode: 1) { mode in
                 if mode == 0 { router.replace(.subjectLessons) }
             }
@@ -328,7 +446,7 @@ struct SubjectEmptyScreen: View {
 
     private var wide: some View {
         DesignCanvas {
-            FolderNavBar(onBack: { router.pop() })
+            FolderNavBar(onBack: { router.pop() }, canSearch: false) { FolderMenu(router: router) }
             SubjectHeader(name: "운영체제", detail: "금 10:30–12:00 · 판서 0장", mode: 0)
 
             VStack(spacing: 0) {
@@ -348,27 +466,24 @@ struct SubjectEmptyScreen: View {
 
 // MARK: - 좁은 화면 (스플릿 뷰)
 
-/// 과목 화면 위 막대 오른쪽의 검색 · 더 보기
-private struct FolderActions: View {
-    var body: some View {
-        HStack(spacing: 20) {
-            Image("search-24")
-            Image("more-24")
-        }
-    }
-}
 
 extension SubjectLessonsScreen {
     func narrow(_ size: CGSize) -> some View {
         NarrowPage(backTitle: "판서함", onBack: { router.popTo(.home) },
                    title: "자료구조", detail: "월 10:30–12:00 · 판서 12장 · 카드 34개",
-                   trailing: { FolderActions() }, content: {
+                   trailing: {
+            FolderActions(onSearch: { searching = true }) {
+                FolderMenu(router: router, switchTo: ("카드 모아 보기", .subjectCards))
+            }
+        }, content: {
+            if searching { FolderSearchField(text: $query) { searching = false; query = "" } }
             NarrowModeToggle(mode: 0) { mode in
                 if mode == 1 { router.replace(.subjectCards) }
             }
 
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(lessons) { lesson in
+                if shownLessons.isEmpty { NoSearchResult(query: query) }
+                ForEach(shownLessons) { lesson in
                     Button { router.push(.result) } label: {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
@@ -423,7 +538,12 @@ extension SubjectCardsScreen {
         let cardWidth = (inner - 12 * CGFloat(columnCount - 1)) / CGFloat(columnCount)
         return NarrowPage(backTitle: "판서함", onBack: { router.popTo(.home) },
                           title: "자료구조", detail: "월 10:30–12:00 · 판서 12장 · 카드 34개",
-                          trailing: { FolderActions() }, content: {
+                          trailing: {
+            FolderActions(onSearch: { searching = true }) {
+                FolderMenu(router: router, switchTo: ("수업별로 보기", .subjectLessons))
+            }
+        }, content: {
+            if searching { FolderSearchField(text: $query) { searching = false; query = "" } }
             NarrowModeToggle(mode: 1) { mode in
                 if mode == 0 { router.replace(.subjectLessons) }
             }
@@ -512,7 +632,7 @@ extension SubjectEmptyScreen {
     func narrow(_ size: CGSize) -> some View {
         NarrowPage(backTitle: "판서함", onBack: { router.pop() },
                    title: "운영체제", detail: "금 10:30–12:00 · 판서 0장",
-                   trailing: { FolderActions() }, content: {
+                   trailing: { FolderActions(canSearch: false) { FolderMenu(router: router) } }, content: {
             NarrowModeToggle(mode: 0)
 
             VStack(spacing: 0) {

@@ -36,6 +36,7 @@ struct ContentView: View {
         case .allSemesters: AllSemestersScreen()
         case .pastSemester: PastSemesterScreen()
         case .account: AccountScreen()
+        case .pending: PendingScreen()
         }
     }
 }

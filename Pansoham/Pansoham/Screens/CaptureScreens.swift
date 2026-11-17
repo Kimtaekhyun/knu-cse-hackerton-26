@@ -28,6 +28,7 @@ struct CaptureScreen: View {
     @Environment(Router.self) private var router
     @State private var mode = 0      // 0 빔 화면, 1 칠판
     @State private var pen = 0       // 0 빨간 펜, 1 검은 펜
+    @State private var showAlbum = false
 
     private let viewfinder = Color(red: 0x29 / 255, green: 0x29 / 255, blue: 0x2B / 255)
 
@@ -36,6 +37,17 @@ struct CaptureScreen: View {
         Motion(length: 1.4) { t in
             Adaptive { canvas(t) } narrow: { narrow($0, t) }
         }
+        // 앨범에서 사진을 고르면 찍은 것처럼 처리 중 화면으로 넘어가요.
+        .imagePicker(isPresented: $showAlbum) { _ in router.push(.processing) }
+    }
+
+    /// 셔터: 누르면 처리 중, 길게 누르면 "화면을 찾지 못함"(11) 화면 (데모용)
+    func shutter() -> some View {
+        Image("shutter-84")
+            .contentShape(Circle())
+            .onTapGesture { router.push(.processing) }
+            .onLongPressGesture(minimumDuration: 0.6) { router.push(.captureError) }
+            .accessibilityAddTraits(.isButton)
     }
 
     private func canvas(_ t: Double) -> some View {
@@ -83,8 +95,8 @@ struct CaptureScreen: View {
             // 오른쪽 조작부
             ZStack(alignment: .topLeading) {
                 Color.black.opacity(0.55)
-                // 앨범 (아직 앨범이 없어서, 지금은 "화면을 찾지 못함" 화면을 보여 줘요)
-                Button { router.push(.captureError) } label: {
+                // 앨범
+                Button { showAlbum = true } label: {
                     ZStack(alignment: .topLeading) {
                         RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.9))
                         Capsule().fill(Color.black).frame(width: 32, height: 3).at(10, 16)
@@ -98,8 +110,7 @@ struct CaptureScreen: View {
                 Text("앨범").ds(12, .medium, .white).at(69, 288)
 
                 // 셔터
-                Button { router.push(.processing) } label: { Image("shutter-84") }
-                    .buttonStyle(.plain)
+                shutter()
                     .at(38, 375)
             }
             .frame(width: 160, height: DS.height, alignment: .topLeading)
@@ -475,7 +486,7 @@ extension CaptureScreen {
 
             // 앨범 · 셔터
             HStack {
-                Button { router.push(.captureError) } label: {
+                Button { showAlbum = true } label: {
                     VStack(spacing: 6) {
                         ZStack(alignment: .topLeading) {
                             RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.9))
@@ -489,8 +500,7 @@ extension CaptureScreen {
                 }
                 .buttonStyle(.plain)
                 Spacer()
-                Button { router.push(.processing) } label: { Image("shutter-84") }
-                    .buttonStyle(.plain)
+                shutter()
                 Spacer()
                 Color.clear.frame(width: 52, height: 52)
             }

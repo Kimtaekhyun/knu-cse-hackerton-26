@@ -203,6 +203,7 @@ struct ResultScreen: View {
     @Environment(Router.self) private var router
     @State private var copiedCount: Int?     // 방금 복사한 카드 수 (알림이 떠 있는 동안)
     @State private var shown = 0
+    @State private var showOriginal = false
 
     private let stickers = SampleData.stickers
 
@@ -217,6 +218,16 @@ struct ResultScreen: View {
         }
         // 피그마 타임라인: 자리 표시는 0.1초부터, 카드는 0.3초부터 0.12초 간격으로 나타나요.
         .onAppear { shown = 4 }
+        .fullScreenCover(isPresented: $showOriginal) { OriginalPhotoView() }
+    }
+
+    private var originalButton: some View {
+        Button { showOriginal = true } label: {
+            Text("원본 보기").ds(17, .medium, .dsSub)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: 넓은 화면 (피그마 그대로)
@@ -224,7 +235,7 @@ struct ResultScreen: View {
     private var wide: some View {
         DesignCanvas {
             NavBar(backTitle: "자료구조", title: "", onBack: { router.popTo(.home) }) {
-                Text("원본 보기").ds(17, .medium, .dsSub)
+                originalButton
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -278,7 +289,7 @@ struct ResultScreen: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
-                Text("원본 보기").ds(17, .medium, .dsSub)
+                originalButton
             }
             .padding(.leading, 12)
             .padding(.trailing, side)
@@ -386,5 +397,32 @@ struct ResultScreen: View {
     private func copyAll(thenGuide: Bool) {
         guard copiedCount == nil else { return }
         copy(stickers, thenGuide: thenGuide)
+    }
+}
+
+// MARK: - 원본 사진 크게 보기
+
+/// 결과 화면의 `원본 보기`. 찍은 판서 사진 전체를 검은 바탕에 크게 보여 줘요.
+struct OriginalPhotoView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            Image("board-photo")
+                .resizable()
+                .scaledToFit()
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Button { dismiss() } label: {
+                Image("close-22")
+                    .frame(width: 44, height: 44)
+                    .background(Color.white.opacity(0.16))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(20)
+            .accessibilityLabel("닫기")
+        }
     }
 }

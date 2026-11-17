@@ -63,7 +63,7 @@ struct HomeScreen: View {
                            : t < 2.1 ? tween(t, 0, -8, 1.4, 2.1, .inOut)
                            : tween(t, -8, 0, 2.1, 2.8, .inOut))
             } else {
-                Image("bell-dot").at(1092, 49)
+                Image("bell-dot").at(1092, 49).allowsHitTesting(false)
             }
         }
     }
@@ -75,7 +75,8 @@ struct HomeScreen: View {
             Text("판서함").ds(34, .bold)
             Spacer()
             HStack(spacing: 20) {
-                Image("bell")
+                Button { router.push(.pending) } label: { Image("bell") }
+                    .buttonStyle(.plain)
                 Button { router.push(.account) } label: {
                     Text("김").ds(15, .bold, .white)
                         .frame(width: 34, height: 34)
@@ -185,7 +186,12 @@ struct HomeScreen: View {
                         .clipShape(Capsule())
                 }
                 Spacer()
-                Text("모두 보기").ds(13, .medium, .dsSub)
+                Button { router.push(.pending) } label: {
+                    Text("모두 보기").ds(13, .medium, .dsSub)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
             pendingRow(title: "자료구조 · 오늘 10:42", detail: "카드 4개 · 굿노트로 옮기지 않았어요", x: -0.5, y: -0.1667)
                 .entrance(shown, delay: 0.5, duration: 0.35, y: 12)
@@ -339,9 +345,12 @@ extension HomeScreen {
                 Text("판서함").ds(28, .bold)
                 Spacer()
                 HStack(spacing: 20) {
-                    Image("bell").overlay(alignment: .topLeading) {
-                        if !isFirst { Image("bell-dot").offset(x: 16, y: -1) }
+                    Button { router.push(.pending) } label: {
+                        Image("bell").overlay(alignment: .topLeading) {
+                            if !isFirst { Image("bell-dot").offset(x: 16, y: -1) }
+                        }
                     }
+                    .buttonStyle(.plain)
                     Button { router.push(.account) } label: {
                         Text("김").ds(15, .bold, .white)
                             .frame(width: 34, height: 34)
