@@ -11,8 +11,6 @@ import SwiftUI
 
 struct CaptureScreen: View {
     @Environment(Router.self) private var router
-    @State private var mode = 0      // 0 빔 화면, 1 칠판
-    @State private var pen = 0       // 0 빨간 펜, 1 검은 펜
     @State private var showAlbum = false
 
     private let viewfinder = Color(red: 0x29 / 255, green: 0x29 / 255, blue: 0x2B / 255)
@@ -100,49 +98,7 @@ struct CaptureScreen: View {
             }
             .frame(width: 160, height: DS.height, alignment: .topLeading)
             .at(1034, 0)
-
-            // 펜 색
-            HStack(spacing: 8) {
-                penChip("빨간 펜", index: 0)
-                penChip("검은 펜", index: 1)
-            }
-            .at(476, 700)
-
-            // 촬영 모드
-            HStack(spacing: 4) {
-                modeChip("빔 화면", index: 0)
-                modeChip("칠판", index: 1)
-            }
-            .padding(4)
-            .background(Color.white.opacity(0.16))
-            .clipShape(Capsule())
-            .at(463.5, 744)
         }
-    }
-
-    private func penChip(_ title: String, index: Int) -> some View {
-        let on = pen == index
-        return Button { pen = index } label: {
-            Text(title).ds(13, .bold, on ? .white : .white.opacity(0.6))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .overlay(Capsule().stroke(on ? Color.white : Color.white.opacity(0.3), lineWidth: 1.5))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func modeChip(_ title: String, index: Int) -> some View {
-        let on = mode == index
-        return Button { withAnimation(.easeInOut(duration: 0.15)) { mode = index } } label: {
-            Text(title).ds(15, .bold, on ? .black : .white)
-                .padding(.horizontal, 22)
-                .padding(.vertical, 10)
-                .background(on ? Color.white : Color.clear)
-                .clipShape(Capsule())
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -154,7 +110,6 @@ struct CaptureErrorScreen: View {
     private let tips = [
         "화면 전체가 들어오게 한 걸음 뒤에서",
         "빛 반사가 심하면 조금 옆으로 비켜서",
-        "칠판이라면 촬영 모드를 칠판으로",
     ]
 
     var body: some View {
@@ -267,19 +222,6 @@ extension CaptureScreen {
             .padding(.top, 16)
 
             Spacer(minLength: 16)
-
-            HStack(spacing: 8) {
-                penChip("빨간 펜", index: 0)
-                penChip("검은 펜", index: 1)
-            }
-            HStack(spacing: 4) {
-                modeChip("빔 화면", index: 0)
-                modeChip("칠판", index: 1)
-            }
-            .padding(4)
-            .background(Color.white.opacity(0.16))
-            .clipShape(Capsule())
-            .padding(.top, 12)
 
             // 앨범 · 셔터
             HStack {

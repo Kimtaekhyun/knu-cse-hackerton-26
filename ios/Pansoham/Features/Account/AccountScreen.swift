@@ -11,9 +11,31 @@ struct AccountScreen: View {
     @Environment(Router.self) private var router
     @State private var classAlert = true
     @State private var pendingAlert = true
+    @AppStorage("profileName") private var name = "김마린"
+    @AppStorage("profileSchool") private var school = "경북대학교"
+    @State private var editingProfile = false
+    @State private var draftName = ""
+    @State private var draftSchool = ""
+    @State private var confirmingDelete = false
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
+            .alert("프로필 수정", isPresented: $editingProfile) {
+                TextField("이름", text: $draftName)
+                TextField("학교", text: $draftSchool)
+                Button("취소", role: .cancel) {}
+                Button("저장") {
+                    let newName = draftName.trimmingCharacters(in: .whitespaces)
+                    if !newName.isEmpty { name = newName }
+                    school = draftSchool.trimmingCharacters(in: .whitespaces)
+                }
+            }
+            .alert("계정을 삭제할까요?", isPresented: $confirmingDelete) {
+                Button("취소", role: .cancel) {}
+                Button("삭제", role: .destructive) { router.reset(to: .login) }
+            } message: {
+                Text("찍은 판서와 카드가 모두 지워지고 되돌릴 수 없어요.")
+            }
     }
 
     private var wide: some View {
@@ -27,18 +49,13 @@ struct AccountScreen: View {
         }
     }
 
-    /// 설정 묶음 네 개
+    /// 설정 묶음 세 개
     private func settings(_ width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 22) {
             group("학기", width) {
                 row("현재 학기", value: "2026년 2학기", chevron: true) { router.push(.allSemesters) }
                 divider
                 row("시간표 수정", chevron: true) { router.push(.timetableConfirm) }
-            }
-            group("촬영", width) {
-                row("기본 촬영 모드", value: "빔 화면", chevron: true)
-                divider
-                row("기본 펜 색", value: "빨간 펜", chevron: true)
             }
             group("알림", width) {
                 toggleRow("수업 시작 알림", isOn: $classAlert)
@@ -48,7 +65,7 @@ struct AccountScreen: View {
             group("계정", width) {
                 row("로그아웃") { router.reset(to: .login) }
                 divider
-                row("계정 삭제", color: .dsSub)
+                row("계정 삭제", color: .dsSub) { confirmingDelete = true }
             }
         }
     }
@@ -57,21 +74,25 @@ struct AccountScreen: View {
 
     private func profileCard(_ width: CGFloat = 340) -> some View {
         VStack(spacing: 0) {
-            Text("김").ds(36, .bold, .white)
+            Text(String(name.prefix(1))).ds(36, .bold, .white)
                 .frame(width: 88, height: 88)
                 .background(Color.black)
                 .clipShape(Circle())
             Color.clear.frame(width: 1, height: 16)
-            Text("김마린")
+            Text(name)
                 .font(.system(size: 24, weight: .bold))
                 .tracking(-0.6)
                 .foregroundStyle(.black)
             Color.clear.frame(width: 1, height: 4)
-            Text("경북대학교").ds(15, .regular, .dsSub)
+            Text(school).ds(15, .regular, .dsSub)
             Color.clear.frame(width: 1, height: 4)
             Text("카카오 계정으로 로그인됨").ds(13, .regular, .dsSub)
             Color.clear.frame(width: 1, height: 20)
-            SecondaryButton(title: "프로필 수정", width: width - 48)
+            SecondaryButton(title: "프로필 수정", width: width - 48) {
+                draftName = name
+                draftSchool = school
+                editingProfile = true
+            }
             Color.clear.frame(width: 1, height: 24)
             HStack(alignment: .top) {
                 stat("28", "찍은 판서")
