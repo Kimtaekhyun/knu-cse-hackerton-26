@@ -11,8 +11,8 @@ import SwiftUI
 
 struct CaptureScreen: View {
     @Environment(Router.self) private var router
-    @State private var mode = 0      // 0 빔 화면, 1 칠판
-    @State private var pen = 0       // 0 빨간 펜, 1 검은 펜
+    @State private var mode = UserDefaults.standard.integer(forKey: CaptureDefaults.modeKey)  // 0 빔 화면, 1 칠판
+    @State private var pen = UserDefaults.standard.integer(forKey: CaptureDefaults.penKey)    // 0 빨간 펜, 1 검은 펜
     @State private var showAlbum = false
 
     private let viewfinder = Color(red: 0x29 / 255, green: 0x29 / 255, blue: 0x2B / 255)
