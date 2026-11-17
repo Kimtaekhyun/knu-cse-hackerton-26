@@ -1,0 +1,25 @@
+[project]
+name = "pansoham-server"
+version = "0.1.0"
+description = "판서함 백엔드 (FastAPI)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+    "pydantic-settings",
+    "google-genai",
+    "httpx",
+    "pillow",
+    "numpy",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

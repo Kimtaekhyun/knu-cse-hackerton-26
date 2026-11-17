@@ -16,3 +16,14 @@ jobs:
       - uses: astral-sh/ruff-action@v3
         with:
           args: "format --check"
+
+  server-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - run: uv run pytest

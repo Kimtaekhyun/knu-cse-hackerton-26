@@ -113,7 +113,9 @@ struct TimetableUploadScreen: View {
 
 struct TimetableConfirmScreen: View {
     @Environment(Router.self) private var router
-    @State private var subjects = SampleData.timetable
+    @State private var subjects: [TimetableSubject] = []
+    /// 서버에서 시간표를 읽는 상태
+    @State private var load: LoadState = .idle
     /// 고치는 중인 과목 (nil 이면 새 과목 추가)
     @State private var editingID: UUID?
     @State private var showEditor = false
@@ -124,6 +126,7 @@ struct TimetableConfirmScreen: View {
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
+            .task { if load == .idle { await analyze() } }
             .alert(editingID == nil ? "과목 추가" : "과목 고치기", isPresented: $showEditor) {
                 TextField("과목 이름", text: $draftName)
                 TextField("요일 · 시간 (예: 월 10:30–12:00)", text: $draftTime)
@@ -166,54 +169,61 @@ struct TimetableConfirmScreen: View {
 
             // 시간표 목록
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(subjects) { subject in
-                    HStack(spacing: 14) {
-                        Button { edit(subject) } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(subject.name).ds(17, .bold)
-                                    Text(subject.time).ds(15, .regular, .dsSub)
+                if load == .loaded {
+                    if subjects.isEmpty {
+                        Text("과목을 찾지 못했어요. 과목 추가로 직접 넣어 주세요.").ds(15, .regular, .dsSub).padding(.vertical, 14)
+                    }
+                    ForEach(subjects) { subject in
+                        HStack(spacing: 14) {
+                            Button { edit(subject) } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(subject.name).ds(17, .bold)
+                                        Text(subject.time).ds(15, .regular, .dsSub)
+                                    }
+                                    Spacer(minLength: 0)
                                 }
-                                Spacer(minLength: 0)
+                                .contentShape(Rectangle())
                             }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                subjects.removeAll { $0.id == subject.id }
+                            .buttonStyle(.plain)
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    subjects.removeAll { $0.id == subject.id }
+                                }
+                            } label: {
+                                Image("minus-circle-28")
                             }
-                        } label: {
-                            Image("minus-circle-28")
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.vertical, 14)
+                        .frame(width: 766)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(Color.dsLine).frame(height: 1)
+                        }
                     }
-                    .padding(.vertical, 14)
-                    .frame(width: 766)
-                    .overlay(alignment: .bottom) {
-                        Rectangle().fill(Color.dsLine).frame(height: 1)
-                    }
-                }
 
-                Button {
-                    edit(nil)
-                } label: {
-                    HStack(spacing: 10) {
-                        Image("plus-20")
-                        Text("과목 추가").ds(17, .bold)
+                    Button {
+                        edit(nil)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image("plus-20")
+                            Text("과목 추가").ds(17, .bold)
+                        }
+                        .padding(.vertical, 20)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.vertical, 20)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                    .buttonStyle(.plain)
 
-                Text("시간이 정해지지 않은 과목(사이버강의 등)은 미분류함에서 직접 옮겨요.")
-                    .ds(14, .regular, .dsSub)
+                    Text("시간이 정해지지 않은 과목(사이버강의 등)은 미분류함에서 직접 옮겨요.")
+                        .ds(14, .regular, .dsSub)
+                } else {
+                    statusView(width: 766)
+                }
             }
             .at(380, 210)
 
-            BottomBar(caption: "과목 \(subjects.count)개를 찾았어요") {
-                PrimaryButton(title: "이대로 저장", width: 280) {
+            BottomBar(caption: caption) {
+                PrimaryButton(title: "이대로 저장", width: 280, enabled: load == .loaded) {
                     router.reset(to: .homeFirst)
                 }
             }
@@ -225,6 +235,57 @@ struct TimetableConfirmScreen: View {
             .fill(Color.black.opacity(opacity))
             .frame(width: 44, height: 66)
             .at(x, y)
+    }
+
+    enum LoadState: Equatable {
+        case idle, loading, loaded
+        case failed(String)
+    }
+
+    /// 05 에서 고른 캡처를 서버로 보내 과목 목록을 채워요.
+    /// 캡처가 없으면(개발용 `-startScreen timetableConfirm`) 샘플 과목을 보여 줘요.
+    private func analyze() async {
+        guard let image = router.timetableImage else {
+            subjects = SampleData.timetable
+            load = .loaded
+            return
+        }
+        load = .loading
+        do {
+            subjects = try await TimetableAPI.parse(image)
+            load = .loaded
+        } catch {
+            load = .failed(error.localizedDescription)
+        }
+    }
+
+    /// 아래 막대 설명
+    private var caption: String {
+        switch load {
+        case .idle, .loading: "시간표를 읽는 중이에요"
+        case .failed: "시간표를 읽지 못했어요"
+        case .loaded: "과목 \(subjects.count)개를 찾았어요"
+        }
+    }
+
+    /// 과목 목록 자리에 보여 줄 분석 중 · 실패 표시
+    @ViewBuilder
+    private func statusView(width: CGFloat) -> some View {
+        if case .failed(let message) = load {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(message).dsWrap(15, .regular, .dsSub)
+                SecondaryButton(title: "다시 시도", width: 160) { Task { await analyze() } }
+            }
+            .padding(.vertical, 20)
+            .frame(width: width, alignment: .leading)
+        } else {
+            HStack(spacing: 12) {
+                ProgressView()
+                Text("시간표를 읽고 있어요. 1분 정도 걸릴 수 있어요.").dsWrap(15, .regular, .dsSub)
+            }
+            .padding(.vertical, 20)
+            .frame(width: width, alignment: .leading)
+        }
     }
 
     /// 과목 고치기 (nil 이면 새로 추가)
@@ -339,44 +400,51 @@ extension TimetableConfirmScreen {
             .frame(maxWidth: .infinity)
 
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(subjects) { subject in
-                    HStack(spacing: 14) {
-                        Button { edit(subject) } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(subject.name).ds(17, .bold)
-                                    Text(subject.time).ds(15, .regular, .dsSub)
+                if load == .loaded {
+                    if subjects.isEmpty {
+                        Text("과목을 찾지 못했어요. 과목 추가로 직접 넣어 주세요.").dsWrap(15, .regular, .dsSub).padding(.vertical, 14)
+                    }
+                    ForEach(subjects) { subject in
+                        HStack(spacing: 14) {
+                            Button { edit(subject) } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(subject.name).ds(17, .bold)
+                                        Text(subject.time).ds(15, .regular, .dsSub)
+                                    }
+                                    Spacer(minLength: 0)
                                 }
-                                Spacer(minLength: 0)
+                                .contentShape(Rectangle())
                             }
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) { subjects.removeAll { $0.id == subject.id } }
+                            } label: { Image("minus-circle-28") }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) { subjects.removeAll { $0.id == subject.id } }
-                        } label: { Image("minus-circle-28") }
-                        .buttonStyle(.plain)
+                        .padding(.vertical, 14)
+                        .frame(width: inner)
+                        .overlay(alignment: .bottom) { Rectangle().fill(Color.dsLine).frame(height: 1) }
                     }
-                    .padding(.vertical, 14)
-                    .frame(width: inner)
-                    .overlay(alignment: .bottom) { Rectangle().fill(Color.dsLine).frame(height: 1) }
-                }
-                Button {
-                    edit(nil)
-                } label: {
-                    HStack(spacing: 10) {
-                        Image("plus-20")
-                        Text("과목 추가").ds(17, .bold)
+                    Button {
+                        edit(nil)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image("plus-20")
+                            Text("과목 추가").ds(17, .bold)
+                        }
+                        .padding(.vertical, 18)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.vertical, 18)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    Text("시간이 정해지지 않은 과목(사이버강의 등)은 미분류함에서 직접 옮겨요.").dsWrap(13, .regular, .dsSub)
+                } else {
+                    statusView(width: inner)
                 }
-                .buttonStyle(.plain)
-                Text("시간이 정해지지 않은 과목(사이버강의 등)은 미분류함에서 직접 옮겨요.").dsWrap(13, .regular, .dsSub)
             }
         }, bottom: {
-            NarrowBottomBar(caption: "과목 \(subjects.count)개를 찾았어요") {
-                PrimaryButton(title: "이대로 저장", width: inner < 440 ? 150 : 200) { router.reset(to: .homeFirst) }
+            NarrowBottomBar(caption: caption) {
+                PrimaryButton(title: "이대로 저장", width: inner < 440 ? 150 : 200, enabled: load == .loaded) { router.reset(to: .homeFirst) }
             }
         })
     }

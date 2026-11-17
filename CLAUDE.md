@@ -14,6 +14,7 @@ Team repository for the Kyungpook National University School of Computer Science
 - Lint: `uvx ruff check .`
 - Format: `uvx ruff format .`
 - A hook runs ruff automatically whenever a `.py` file is edited (except in experiments)
+- Server: `cd server && uv sync`, run `uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`, test `uv run pytest`. Settings are read from the repo-root `.env` (see `.env.example`)
 
 ## Collaboration Rules
 - Do not push directly to main. Branch → PR → merge after review. The user merges themselves.
