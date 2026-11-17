@@ -5,6 +5,7 @@
 //  04 로그인 — 피그마 "chalkdrop 로그인 v2" (188:656)
 //  처음 뜰 때 왼쪽 그림 세 덩어리(칠판 → 카드 → 노트)가 위에서 차례로 떨어지고,
 //  오른쪽 로고 · 제목 · 버튼이 이어서 떠올라요.
+//  세로 화면은 피그마 "chalkdrop 로그인 v2 · 세로" (209:660): 그림이 위, 글자 · 버튼이 아래.
 //
 
 import SwiftUI
@@ -77,17 +78,18 @@ struct LoginScreen: View {
 
     // MARK: 오른쪽 소개
 
-    private func intro(_ t: Double) -> some View {
+    /// 로고 왼쪽 위가 (x, y). 가로 화면은 (669, 88), 세로 화면은 (48, 600).
+    private func intro(_ t: Double, x: CGFloat = 669, y: CGFloat = 88) -> some View {
         ZStack(alignment: .topLeading) {
             // 로고: 튀어나오면서 파란 선이 오른쪽으로 한 번 훑고 돌아와요.
             LogoMark(split: t < 0.85 ? tween(t, 512, 740, 0.45, 0.85, .inOut)
                                      : tween(t, 740, 512, 0.85, 1.35, .inOut))
                 .frame(width: 56, height: 51)
                 .enter(t, at: 0.25, dur: 0.6, scale: 0.5)
-                .at(669, 88)
+                .at(x, y)
             Text("chalkdrop").v2(26, .bold, .ink, tracking: -1.04)
                 .enter(t, at: 0.4, dur: 0.5, dx: -14, ease: .out)
-                .at(735, 96)
+                .at(x + 66, y + 8)
 
             // 제목은 줄마다 따로 떠올라요 (줄 높이 1.25)
             VStack(alignment: .leading, spacing: 2) {
@@ -96,13 +98,13 @@ struct LoginScreen: View {
                 Text("노트에 놓으세요.").v2(44, .bold, .ink, tracking: -1.32)
                     .enter(t, at: 0.62, dy: 28)
             }
-            .at(669, 171)
+            .at(x, y + 83)
 
             Text("칠판·프로젝터 사진에서 필기만 카드로 뽑아\n굿노트로 바로 옮길 수 있어요.")
                 .v2(18, .medium, .sub, tracking: -0.36)
                 .lineSpacing(7)
                 .enter(t, at: 0.8, dur: 0.5, dy: 12, ease: .out)
-                .at(669, 301)
+                .at(x, y + 213)
         }
     }
 
@@ -151,9 +153,10 @@ struct LoginScreen: View {
             .lineSpacing(5)
     }
 
-    // MARK: 왼쪽 그림 패널 (549 × 786)
+    // MARK: 왼쪽 그림 패널 (549 × 786) · 세로 화면은 위쪽 (786 × 520)
 
-    private func illustration(_ t: Double) -> some View {
+    /// `portrait` 면 칠판은 왼쪽 위 그대로, 노트는 오른쪽으로 옮기고 카드를 노트 위 놓을 자리에 둬요.
+    private func illustration(_ t: Double, portrait: Bool = false) -> some View {
         ZStack(alignment: .topLeading) {
             Color.panel
 
@@ -171,22 +174,25 @@ struct LoginScreen: View {
                 .position(x: 216.2, y: 157.2)
 
             // 칠판에서 카드까지 이어지는 점선이 위에서 아래로 그려져요.
+            let path = portrait ? CGSize(width: 200, height: 150) : CGSize(width: 130, height: 170)
             Image("login-drag-path")
+                .resizable()
+                .frame(width: path.width, height: path.height)
                 .mask(alignment: .top) {
-                    Rectangle().frame(height: 170 * tween(t, 0, 1, 1.15, 1.65, .inOut))
+                    Rectangle().frame(height: path.height * tween(t, 0, 1, 1.15, 1.65, .inOut))
                 }
-                .at(232, 168)
+                .at(portrait ? 200 : 232, portrait ? 170 : 168)
 
             notePage(t)
                 .enter(t, at: 0.49, dur: 0.8, dy: -120)
-                .at(120, 440)
+                .at(portrait ? 382 : 120, portrait ? 160 : 440)
 
             dragCard(t)
                 .rotationEffect(.degrees(5 + 10 * (1 - tween(t, 0, 1, 0.32, 1.12, .spring))))
                 .enter(t, at: 0.32, dur: 0.8, dy: -120)
-                .position(x: 360, y: 380.4)
+                .position(x: portrait ? 526 : 360, y: portrait ? 388.4 : 380.4)
         }
-        .frame(width: 549, height: 786, alignment: .topLeading)
+        .frame(width: portrait ? 786 : 549, height: portrait ? 520 : 786, alignment: .topLeading)
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 
@@ -286,7 +292,34 @@ struct LoginScreen: View {
 // MARK: - 좁은 화면 (스플릿 뷰)
 
 extension LoginScreen {
+    /// 아이패드 세로처럼 넓은 세로 창은 피그마 세로 디자인, 스플릿 뷰처럼 좁은 창은 한 줄 배치.
+    @ViewBuilder
     func narrow(_ size: CGSize) -> some View {
+        if size.width >= 700 { portrait } else { compact(size) }
+    }
+
+    /// 세로 화면 — 피그마 "chalkdrop 로그인 v2 · 세로" (834 × 1194)
+    private var portrait: some View {
+        PortraitCanvas {
+            Motion(length: 2.2) { t in
+                ZStack(alignment: .topLeading) {
+                    illustration(t, portrait: true)
+                        .enter(t, at: 0, dur: 0.5, scale: 0.97, ease: .out)
+                        .at(24, 24)
+                    intro(t, x: 48, y: 600)
+                    buttons(t, width: 738).at(48, 919)
+                    terms
+                        .frame(width: 738)
+                        .enter(t, at: 1.3, dur: 0.5, ease: .out)
+                        .at(48, 1145)
+                }
+                .frame(width: portraitWidth, height: portraitHeight, alignment: .topLeading)
+            }
+        }
+    }
+
+    /// 스플릿 뷰처럼 좁은 창
+    private func compact(_ size: CGSize) -> some View {
         let inner = min(size.width - 40, 437)
         return Motion(length: 2.0) { t in
             ScrollView {
@@ -321,10 +354,32 @@ extension LoginScreen {
                 }
                 .frame(width: inner, alignment: .leading)
                 .padding(.vertical, 48)
-                .frame(maxWidth: .infinity)
+                // 내용이 창보다 짧으면 위아래 가운데에 둬요 (길면 지금처럼 스크롤).
+                .frame(maxWidth: .infinity, minHeight: size.height)
             }
         }
         .background(Color.white.ignoresSafeArea())
+    }
+}
+
+private let portraitWidth: CGFloat = 834
+private let portraitHeight: CGFloat = 1194
+
+/// 세로 피그마 프레임(834 × 1194)을 화면에 맞춰 보여 주는 틀 (`DesignCanvas` 의 세로판)
+private struct PortraitCanvas<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        GeometryReader { geo in
+            let scale = min(geo.size.width / portraitWidth, geo.size.height / portraitHeight)
+            content
+                .frame(width: portraitWidth, height: portraitHeight, alignment: .topLeading)
+                .clipped()
+                .scaleEffect(scale)
+                .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .background(Color.white.ignoresSafeArea())
+        .ignoresSafeArea()
     }
 }
 
