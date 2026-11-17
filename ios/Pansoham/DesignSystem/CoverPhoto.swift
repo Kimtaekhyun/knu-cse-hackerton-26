@@ -1,6 +1,6 @@
 //
 //  CoverPhoto.swift
-//  판서함
+//  chalkdrop
 //
 //  틀을 꽉 채우게 잘라 보여 주는 판서 사진
 //

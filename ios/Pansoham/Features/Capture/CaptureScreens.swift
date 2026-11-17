@@ -1,6 +1,6 @@
 //
 //  CaptureScreens.swift
-//  판서함
+//  chalkdrop
 //
 //  09 촬영 · 11 오류(화면을 찾지 못함)
 //

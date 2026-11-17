@@ -1,6 +1,6 @@
 //
 //  AccountScreen.swift
-//  판서함
+//  chalkdrop
 //
 //  23 내 계정
 //
@@ -18,7 +18,7 @@ struct AccountScreen: View {
 
     private var wide: some View {
         DesignCanvas {
-            NavBar(backTitle: "판서함", title: "", onBack: { router.pop() })
+            NavBar(backTitle: "chalkdrop", title: "", onBack: { router.pop() })
             Text("내 계정").ds(34, .bold).at(48, 92)
 
             profileCard().at(48, 164)
@@ -163,7 +163,7 @@ struct AccountScreen: View {
 extension AccountScreen {
     func narrow(_ size: CGSize) -> some View {
         let inner = size.width - 40
-        return NarrowPage(backTitle: "판서함", onBack: { router.pop() }, title: "내 계정",
+        return NarrowPage(backTitle: "chalkdrop", onBack: { router.pop() }, title: "내 계정",
                           trailing: { EmptyView() }, content: {
             profileCard(inner)
             settings(inner).padding(.top, 8)

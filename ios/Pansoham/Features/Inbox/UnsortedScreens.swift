@@ -1,6 +1,6 @@
 //
 //  UnsortedScreens.swift
-//  판서함
+//  chalkdrop
 //
 //  19 미분류함 · 20 미분류함 · 과목으로 옮기기
 //
@@ -159,7 +159,7 @@ struct UnsortedScreen: View {
 
 extension UnsortedScreen {
     func narrow(_ size: CGSize) -> some View {
-        NarrowPage(backTitle: "판서함", onBack: { router.popTo(.home) },
+        NarrowPage(backTitle: "chalkdrop", onBack: { router.popTo(.home) },
                    title: "미분류함",
                    detail: "시간표 밖에서 찍은 판서 \(items.count)장 · 과목으로 옮겨 정리하세요",
                    trailing: {

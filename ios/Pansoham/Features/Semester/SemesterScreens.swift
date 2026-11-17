@@ -1,6 +1,6 @@
 //
 //  SemesterScreens.swift
-//  판서함
+//  chalkdrop
 //
 //  21 전체 학기 · 22 지난 학기 (2026년 1학기)
 //
@@ -37,7 +37,7 @@ struct AllSemestersScreen: View {
 
     private var wide: some View {
         DesignCanvas {
-            NavBar(backTitle: "판서함", title: "", onBack: { router.pop() })
+            NavBar(backTitle: "chalkdrop", title: "", onBack: { router.pop() })
             PageTitle(title: "전체 학기",
                       detail: "학기가 바뀌면 새 시간표를 올려 주세요. 그 학기의 과목 폴더가 만들어져요.")
 
@@ -129,7 +129,7 @@ struct PastSemesterScreen: View {
 extension AllSemestersScreen {
     func narrow(_ size: CGSize) -> some View {
         let cardWidth = (size.width - 40 - 12) / 2
-        return NarrowPage(backTitle: "판서함", onBack: { router.pop() },
+        return NarrowPage(backTitle: "chalkdrop", onBack: { router.pop() },
                           title: "전체 학기",
                           detail: "학기가 바뀌면 새 시간표를 올려 주세요. 그 학기의 과목 폴더가 만들어져요.",
                           trailing: { EmptyView() }, content: {

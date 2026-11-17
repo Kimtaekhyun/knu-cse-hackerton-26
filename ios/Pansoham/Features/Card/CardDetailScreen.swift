@@ -1,6 +1,6 @@
 //
 //  CardDetailScreen.swift
-//  판서함
+//  chalkdrop
 //
 //  17 카드 상세·수정
 //

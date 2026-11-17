@@ -1,6 +1,6 @@
 //
 //  TimetableScreens.swift
-//  판서함
+//  chalkdrop
 //
 //  05 시간표 업로드 · 06 시간표 확인
 //

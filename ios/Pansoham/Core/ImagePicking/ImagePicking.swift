@@ -1,6 +1,6 @@
 //
 //  ImagePicking.swift
-//  판서함
+//  chalkdrop
 //
 //  사진첩에서 고르기 · 끌어다 놓기로 이미지 한 장을 받는 도구.
 //

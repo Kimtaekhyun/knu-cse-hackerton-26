@@ -1,6 +1,6 @@
 //
 //  HomeScreen.swift
-//  판서함
+//  chalkdrop
 //
 //  07 메인 · 처음 (판서 0장) / 08 메인 (판서가 쌓인 뒤)
 //
@@ -72,7 +72,7 @@ struct HomeScreen: View {
 
     private var topBar: some View {
         HStack {
-            Text("판서함").ds(34, .bold)
+            Text("chalkdrop").ds(34, .bold)
             Spacer()
             HStack(spacing: 20) {
                 Button { router.push(.pending) } label: { Image("bell") }
@@ -120,7 +120,7 @@ struct HomeScreen: View {
             Color.clear.frame(width: 1, height: 14)
             Text("자료구조").ds(34, .bold, .white)
             Color.clear.frame(width: 1, height: 4)
-            Text("IT-5호관 245 · 12:00에 끝나요").ds(15, .regular, .dsSub)
+            Text("12:00에 끝나요").ds(15, .regular, .dsSub)
             Color.clear.frame(width: 1, height: 20)
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.white.opacity(0.2)).frame(width: width - 48, height: 6)
@@ -342,7 +342,7 @@ extension HomeScreen {
         return VStack(spacing: 0) {
             // 위 막대
             HStack {
-                Text("판서함").ds(28, .bold)
+                Text("chalkdrop").ds(28, .bold)
                 Spacer()
                 HStack(spacing: 20) {
                     Button { router.push(.pending) } label: {

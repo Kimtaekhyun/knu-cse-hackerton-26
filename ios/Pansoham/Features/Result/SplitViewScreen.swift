@@ -1,6 +1,6 @@
 //
 //  SplitViewScreen.swift
-//  판서함
+//  chalkdrop
 //
 //  14 스플릿 뷰 (굿노트로 끌어다 놓기 안내)
 //
@@ -23,11 +23,11 @@ struct SplitViewScreen: View {
 
     private func canvas(_ t: Double) -> some View {
         DesignCanvas(background: .black) {
-            // 판서함 (왼쪽 앱)
+            // chalkdrop (왼쪽 앱)
             ZStack(alignment: .topLeading) {
                 Color.white
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("판서함").ds(28, .bold)
+                    Text("chalkdrop").ds(28, .bold)
                     Text("자료구조 · 오늘 10:42").ds(15, .regular, .dsSub)
                     Color.clear.frame(width: 1, height: 4)
                     ForEach(stickers) { sticker in
