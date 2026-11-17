@@ -137,7 +137,7 @@ struct TimetableConfirmScreen: View {
 
     private var wide: some View {
         DesignCanvas {
-            NavBar(backTitle: "다시 올리기", title: "시간표 확인", onBack: { router.pop() })
+            NavBar(backTitle: "다시 올리기", title: "시간표 확인", onBack: { router.backToUpload() })
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("인식된 시간표를 확인해 주세요").ds(34, .bold)
@@ -372,7 +372,7 @@ extension TimetableUploadScreen {
 extension TimetableConfirmScreen {
     func narrow(_ size: CGSize) -> some View {
         let inner = size.width - 40
-        return NarrowPage(backTitle: "다시 올리기", barTitle: "시간표 확인", onBack: { router.pop() },
+        return NarrowPage(backTitle: "다시 올리기", barTitle: "시간표 확인", onBack: { router.backToUpload() },
                           title: "인식된 시간표를 확인해 주세요",
                           detail: "잘못 읽힌 과목은 눌러서 고칠 수 있어요.",
                           trailing: { EmptyView() }, content: {
