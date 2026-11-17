@@ -4,11 +4,18 @@
 과목 목록(Subject)으로 만든다.
 """
 
+import json
+import mimetypes
 import re
+import sys
+from pathlib import Path
 
+from google.genai import types
 from pydantic import BaseModel, Field
 
+from app.core.config import get_settings
 from app.schemas.timetable import Slot, Subject
+from app.services.gemini import ask_json
 
 SNAP_MINUTES = 30  # 칸 위치로 시간을 읽어 몇 분씩 어긋나므로 30분 단위로 맞춘다
 TIME_PATTERN = re.compile(r"^(\d{1,2}):(\d{2})$")
@@ -90,3 +97,35 @@ def normalize(raw: RawTimetable) -> list[Subject]:
     )
     untimed = [s for s in subjects if not s.slots]
     return timed + untimed
+
+
+PROMPT = """
+이 이미지는 에브리타임 앱의 시간표 화면 캡처야. 시간표에 있는 수업을 빠짐없이 읽어 줘.
+
+[규칙]
+1. 색칠된 칸 하나가 blocks 하나야. 같은 과목이 여러 요일 · 여러 칸에 있으면 칸마다 따로 적어.
+2. name에는 칸 안의 과목명만 적어. 교수명 · 강의실 · 건물 번호는 넣지 마.
+   과목명이 칸에서 잘려 보이면 보이는 만큼만 적어.
+3. weekday는 칸이 놓인 열의 요일이야. 맨 위 요일 줄을 보고 월=0, 화=1, 수=2, 목=3, 금=4, 토=5, 일=6.
+4. start와 end는 칸의 위 · 아래 가장자리를 왼쪽 시각 눈금에 맞춰 읽은 24시간 HH:MM이야.
+   눈금의 숫자는 그 줄이 시작하는 시각이야 (예: 9는 09:00, 1은 13:00).
+   칸 안에 시각이 적혀 있으면 그 시각을 써.
+5. 시간표 아래처럼 시간 없이 따로 적힌 과목(온라인 · 사이버강의 등)은 untimed에 과목명만 넣어.
+6. 읽을 수 없는 칸은 지어내지 말고 빼.
+"""
+
+
+def parse_timetable(image: bytes, mime_type: str) -> list[Subject]:
+    """시간표 캡처에서 과목 후보를 뽑는다. Gemini가 끝내 실패하면 GeminiError."""
+    contents = [types.Part.from_bytes(data=image, mime_type=mime_type), PROMPT]
+    raw, _ = ask_json(contents, RawTimetable, model=get_settings().timetable_model)
+    return normalize(raw)
+
+
+if __name__ == "__main__":
+    # 확인용: uv run python -m app.services.timetable_ocr <캡처 경로>
+    path = Path(sys.argv[1])
+    mime = mimetypes.guess_type(path.name)[0] or "image/png"
+    subjects = parse_timetable(path.read_bytes(), mime)
+    print(get_settings().timetable_model)
+    print(json.dumps([s.model_dump() for s in subjects], ensure_ascii=False, indent=2))
