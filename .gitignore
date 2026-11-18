@@ -17,3 +17,7 @@ xcuserdata/
 
 # superpowers 계획·설계 문서 (로컬 전용)
 docs/superpowers/
+
+# 팀원별 Xcode 개인 설정 (#22)
+ios/Config/Local.xcconfig
+DerivedData/

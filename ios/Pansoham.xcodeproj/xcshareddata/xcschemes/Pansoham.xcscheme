@@ -51,16 +51,6 @@
             ReferencedContainer = "container:Pansoham.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <CommandLineArguments>
-         <CommandLineArgument
-            argument = "-apiBaseURL http://192.168.219.102:8000"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "-apiBaseURL http://[2001:2d8:824b:ee21:407:b359:ea6b:e58e]:8000"
-            isEnabled = "YES">
-         </CommandLineArgument>
-      </CommandLineArguments>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
