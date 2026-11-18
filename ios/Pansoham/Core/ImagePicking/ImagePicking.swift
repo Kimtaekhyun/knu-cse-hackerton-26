@@ -15,6 +15,12 @@ extension View {
         modifier(ImagePickerModifier(isPresented: isPresented, onPick: onPick))
     }
 
+    /// `isPresented` 가 켜지면 사진첩을 열고, 최대 `maxCount` 장을 고른 순서대로 `onPick` 으로 넘겨요.
+    func multiImagePicker(isPresented: Binding<Bool>, maxCount: Int,
+                          onPick: @escaping ([UIImage]) -> Void) -> some View {
+        modifier(MultiImagePickerModifier(isPresented: isPresented, maxCount: maxCount, onPick: onPick))
+    }
+
     /// 이미지를 끌어다 놓으면 `onDrop` 으로 넘겨요. 끌고 있는 동안 `isTargeted` 가 켜져요.
     func imageDrop(isTargeted: Binding<Bool>, onDrop: @escaping (UIImage) -> Void) -> some View {
         self.onDrop(of: [.image], isTargeted: isTargeted) { providers in
@@ -25,6 +31,33 @@ extension View {
             }
             return true
         }
+    }
+}
+
+private struct MultiImagePickerModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let maxCount: Int
+    let onPick: ([UIImage]) -> Void
+    @State private var items: [PhotosPickerItem] = []
+
+    func body(content: Content) -> some View {
+        content
+            .photosPicker(isPresented: $isPresented, selection: $items,
+                          maxSelectionCount: max(1, maxCount), selectionBehavior: .ordered, matching: .images)
+            .onChange(of: items) { _, newItems in
+                guard !newItems.isEmpty else { return }
+                Task {
+                    var images: [UIImage] = []
+                    for item in newItems {
+                        if let data = try? await item.loadTransferable(type: Data.self),
+                           let image = UIImage(data: data) {
+                            images.append(image)
+                        }
+                    }
+                    items = []
+                    if !images.isEmpty { onPick(images) }
+                }
+            }
     }
 }
 

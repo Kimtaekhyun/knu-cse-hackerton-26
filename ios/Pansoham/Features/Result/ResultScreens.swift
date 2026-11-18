@@ -67,8 +67,40 @@ struct ResultScreen: View {
     @State private var copiedCount: Int?     // 방금 복사한 카드 수 (알림이 떠 있는 동안)
     @State private var shown = 0
     @State private var showOriginal = false
+    /// 여러 장일 때 보고 있는 사진 (12-2)
+    @State private var photoTab = 0
 
     private let stickers = SampleData.stickers
+    /// 방금 정리한 사진 수 (앨범에서 여러 장 고르면 2 이상)
+    private var photoCount: Int { router.processedCount }
+    private var isBatch: Bool { photoCount > 1 }
+    /// 사진마다 카드가 4개씩 (샘플)
+    private var totalCards: Int { stickers.count * photoCount }
+    private var title: String { "판서 \(totalCards)개를 찾았어요" }
+    private func detail(_ tail: String) -> String {
+        isBatch ? "사진 \(photoCount)장 · 11월 17일 10:42 · \(tail)" : "11월 17일 10:42 · \(tail)"
+    }
+    private var copyTitle: String {
+        copiedCount != nil ? "복사됨" : isBatch ? "\(totalCards)개 모두 복사" : "모두 복사"
+    }
+
+    /// 사진 탭: "사진 1 · 카드 4"
+    private var photoTabs: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(0..<photoCount, id: \.self) { index in
+                    let on = photoTab == index
+                    Button { withAnimation(.easeInOut(duration: 0.15)) { photoTab = index } } label: {
+                        Text("사진 \(index + 1) · 카드 \(stickers.count)").ds(14, .bold, on ? .white : .black)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(on ? Color.black : Color.black.opacity(0.05), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -82,6 +114,8 @@ struct ResultScreen: View {
         // 피그마 타임라인: 자리 표시는 0.1초부터, 카드는 0.3초부터 0.12초 간격으로 나타나요.
         .onAppear { shown = 4 }
         .fullScreenCover(isPresented: $showOriginal) { OriginalPhotoView() }
+        // 다른 곳(옮기지 않은 판서 목록 등)에서 결과를 열 때는 한 장으로 보여 줘요.
+        .onDisappear { if !router.stack.contains(.result) { router.processedCount = 1 } }
     }
 
     private var originalButton: some View {
@@ -102,22 +136,29 @@ struct ResultScreen: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("판서 4개를 찾았어요").ds(34, .bold)
-                Text("11월 17일 10:42 · 카드를 굿노트로 끌어다 놓으세요").ds(17, .regular, .dsSub)
+                Text(title).ds(34, .bold)
+                Text(detail("카드를 굿노트로 끌어다 놓으세요")).ds(17, .regular, .dsSub)
             }
             .at(48, 96)
 
-            MarkedPhoto(shown: shown).at(48, 200)
+            // 여러 장이면 사진 탭이 들어가고 아래 내용이 한 줄 내려가요 (12-2)
+            if isBatch {
+                photoTabs.frame(width: 1098, alignment: .leading).at(48, 190)
+            }
+            let top: CGFloat = isBatch ? 252 : 200
+
+            MarkedPhoto(shown: shown).id(photoTab).at(48, top)
 
             // 카드 (왼쪽 줄 1·3, 오른쪽 줄 2·4)
             HStack(alignment: .top, spacing: 16) {
                 VStack(spacing: 16) { card(0); card(2) }
                 VStack(spacing: 16) { card(1); card(3) }
             }
-            .at(444, 200)
+            .id(photoTab)
+            .at(444, top)
 
             BottomBar(caption: "자료구조 폴더에 저장했어요") {
-                PrimaryButton(title: copiedCount == nil ? "모두 복사" : "복사됨", width: 280) { copyAll(thenGuide: true) }
+                PrimaryButton(title: copyTitle, width: 280) { copyAll(thenGuide: true) }
             }
 
             if let copiedCount {
@@ -162,13 +203,15 @@ struct ResultScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("판서 4개를 찾았어요").ds(28, .bold)
-                        Text("11월 17일 10:42 · 카드를 길게 눌러 굿노트로 끌어다 놓으세요")
+                        Text(title).ds(28, .bold)
+                        Text(detail("카드를 길게 눌러 굿노트로 끌어다 놓으세요"))
                             .font(.system(size: 15))
                             .tracking(-0.15)
                             .foregroundStyle(Color.dsSub)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+
+                    if isBatch { photoTabs }
 
                     MarkedPhoto(scale: photoWidth / 372, shown: shown)
                         .frame(maxWidth: .infinity)
@@ -200,7 +243,7 @@ struct ResultScreen: View {
                     .foregroundStyle(Color.dsSub)
                     .lineLimit(2)
                 Spacer(minLength: 0)
-                PrimaryButton(title: copiedCount == nil ? "모두 복사" : "복사됨", width: inner < 440 ? 150 : 200) {
+                PrimaryButton(title: copyTitle, width: inner < 440 ? 150 : 200) {
                     copyAll(thenGuide: false)
                 }
             }
@@ -260,7 +303,8 @@ struct ResultScreen: View {
     /// 모두 복사. 넓은 화면에서만 스플릿 뷰 안내로 넘어가요 (좁은 화면은 이미 나눠 쓰는 중).
     private func copyAll(thenGuide: Bool) {
         guard copiedCount == nil else { return }
-        copy(stickers, thenGuide: thenGuide)
+        // 여러 장이면 사진 순서대로 모든 카드를 이어 붙여요.
+        copy(Array(repeating: stickers, count: photoCount).flatMap { $0 }, thenGuide: thenGuide)
     }
 }
 

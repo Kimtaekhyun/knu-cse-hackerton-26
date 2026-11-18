@@ -13,6 +13,11 @@ struct HomeScreen: View {
 
     @Environment(Router.self) private var router
     @State private var appeared = false
+    /// 촬영 버튼이 펼쳐져 있는지 (08-1)
+    @State private var menuOpen = false
+    @State private var showAlbum = false
+    /// 앨범에서 고른 사진. 2장 이상이면 확인 창(08-2)을 띄워요.
+    @State private var picked: [UIImage] = []
 
     /// 08 에서만 카드 · 알림 · 막대가 차례로 나타나요. 07 은 처음부터 다 보여요.
     private var shown: Bool { isFirst || appeared }
@@ -25,6 +30,33 @@ struct HomeScreen: View {
             Adaptive { canvas(t) } narrow: { narrow($0, t) }
         }
             .onAppear { appeared = true }
+            .overlay {
+                if picked.count > 1 {
+                    AlbumReviewSheet(photos: $picked,
+                                     onMore: { showAlbum = true },
+                                     onCancel: { withAnimation { picked = [] } },
+                                     onStart: { startProcessing(picked) })
+                        .transition(.opacity)
+                }
+            }
+            .multiImagePicker(isPresented: $showAlbum, maxCount: maxAlbumPhotos - picked.count) { images in
+                let all = Array((picked + images).prefix(maxAlbumPhotos))
+                // 한 장만 고르면 확인 없이 바로 정리해요.
+                if all.count == 1 { startProcessing(all) } else { withAnimation { picked = all } }
+            }
+    }
+
+    /// 고른 사진을 처리 중 화면으로 넘겨요.
+    private func startProcessing(_ photos: [UIImage]) {
+        router.albumPhotos = photos
+        picked = []
+        router.push(.processing)
+    }
+
+    private func captureMenu(size: CGFloat) -> some View {
+        CaptureMenu(isOpen: $menuOpen, size: size,
+                    onCamera: { router.push(.capture) },
+                    onAlbum: { showAlbum = true })
     }
 
     private func canvas(_ t: Double) -> some View {
@@ -33,19 +65,7 @@ struct HomeScreen: View {
             leftColumn(t).at(24, 112)
             rightColumn.at(408, 112)
 
-            // 촬영 버튼
-            Button { router.push(.capture) } label: {
-                Image("camera-30")
-                    .frame(width: 72, height: 72)
-                    .background(Color.black)
-                    .clipShape(Circle())
-                    .shadow(color: .black.opacity(0.22), radius: 14, x: 0, y: 10)
-            }
-            .buttonStyle(.plain)
-            .zoomSource()
-            .at(1082, 722)
-
-            if isFirst {
+            if isFirst && !menuOpen {
                 // 첫 촬영 안내
                 Group {
                     Button { router.push(.capture) } label: {
@@ -64,9 +84,17 @@ struct HomeScreen: View {
                            : t < 1.4 ? tween(t, -8, 0, 0.7, 1.4, .inOut)
                            : t < 2.1 ? tween(t, 0, -8, 1.4, 2.1, .inOut)
                            : tween(t, -8, 0, 2.1, 2.8, .inOut))
-            } else {
+            } else if !isFirst {
                 Image("bell-dot").at(1092, 49).allowsHitTesting(false)
             }
+
+            // 촬영 버튼: 누르면 `앨범에서 선택` · `사진 촬영` 으로 펼쳐져요 (08-1)
+            CaptureMenuDim(isOpen: $menuOpen)
+                .frame(width: DS.width, height: DS.height)
+            captureMenu(size: 72)
+                .padding(.trailing, 40)
+                .padding(.bottom, 40)
+                .frame(width: DS.width, height: DS.height, alignment: .bottomTrailing)
         }
     }
 
@@ -404,9 +432,10 @@ extension HomeScreen {
             }
         }
         .background(Color.white.ignoresSafeArea())
+        .overlay { CaptureMenuDim(isOpen: $menuOpen) }
         .overlay(alignment: .bottomTrailing) {
             VStack(alignment: .trailing, spacing: 0) {
-                if isFirst {
+                if isFirst && !menuOpen {
                     VStack(alignment: .trailing, spacing: 0) {
                         Text("여기를 눌러 첫 판서를 찍어 보세요").ds(15, .bold, .white)
                             .padding(.horizontal, 18)
@@ -418,7 +447,7 @@ extension HomeScreen {
                     .offset(y: bob)
                     .padding(.bottom, 8)
                 }
-                NarrowFAB { router.push(.capture) }
+                captureMenu(size: 64)
             }
             .padding(20)
         }
