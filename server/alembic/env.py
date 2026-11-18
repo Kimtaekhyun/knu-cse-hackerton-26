@@ -8,6 +8,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool
 
+import app.models  # noqa: F401  모든 모델을 등록해서 autogenerate가 테이블을 찾게 한다
 from app.core.config import get_settings
 from app.db.base import Base
 
