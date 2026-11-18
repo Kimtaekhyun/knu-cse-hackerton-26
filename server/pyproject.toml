@@ -12,6 +12,9 @@ dependencies = [
     "httpx",
     "pillow",
     "numpy",
+    "sqlalchemy",
+    "psycopg[binary]",
+    "alembic",
 ]
 
 [dependency-groups]

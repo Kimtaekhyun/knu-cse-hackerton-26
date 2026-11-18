@@ -3,11 +3,12 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from PIL import Image
+
 from app.schemas.timetable import Slot, Subject
 from app.services import timetable_ocr
 from app.services.gemini import GeminiError
 from app.services.timetable_ocr import BlockBox, HourMark, TimetableGrid, parse_timetable
-from PIL import Image
 
 
 def grid(box):

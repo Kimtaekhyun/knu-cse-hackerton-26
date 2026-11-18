@@ -22,6 +22,24 @@ jobs:
     defaults:
       run:
         working-directory: server
+    services:
+      db:
+        image: postgres:17
+        env:
+          POSTGRES_USER: pansoham
+          POSTGRES_PASSWORD: pansoham
+          POSTGRES_DB: pansoham
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pansoham"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      DATABASE_URL: postgresql+psycopg://pansoham:pansoham@localhost:5432/pansoham
+      # DB에 붙지 못하면 DB 테스트를 건너뛰지 않고 실패로 처리
+      REQUIRE_DB: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

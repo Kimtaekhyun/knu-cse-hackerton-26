@@ -1,0 +1,49 @@
+"""Alembic 실행 설정.
+
+DB 주소는 서버 설정(DATABASE_URL)에서 읽는다. `-x url=...`을 주면 그 주소를 쓴다 (테스트 DB용).
+"""
+
+from logging.config import fileConfig
+
+from alembic import context
+from sqlalchemy import create_engine, pool
+
+import app.models  # noqa: F401  모든 모델을 등록해서 autogenerate가 테이블을 찾게 한다
+from app.core.config import get_settings
+from app.db.base import Base
+
+config = context.config
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+target_metadata = Base.metadata
+
+
+def database_url() -> str:
+    return context.get_x_argument(as_dictionary=True).get("url") or get_settings().database_url
+
+
+def run_migrations_offline() -> None:
+    """DB에 붙지 않고 SQL만 출력한다 (alembic upgrade --sql)."""
+    context.configure(
+        url=database_url(),
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    engine = create_engine(database_url(), poolclass=pool.NullPool)
+    with engine.connect() as connection:
+        context.configure(connection=connection, target_metadata=target_metadata)
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()

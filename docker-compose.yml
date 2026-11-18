@@ -1,0 +1,40 @@
+# 판서함 개발 환경. BE · FE 모두 `docker compose up` 한 줄로 DB와 API 서버를 띄운다.
+# - API 코드(./server)를 컨테이너에 연결해서 저장하면 서버가 자동으로 다시 시작된다
+# - DB 데이터와 업로드 이미지는 볼륨에 남는다 (지우려면 docker compose down -v)
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: pansoham
+      POSTGRES_PASSWORD: pansoham
+      POSTGRES_DB: pansoham
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pansoham"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  api:
+    build: ./server
+    ports:
+      - "8000:8000"
+    env_file:
+      # GEMINI_API_KEY 등. 없어도 서버는 뜬다 (시간표 인식만 안 됨)
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://pansoham:pansoham@db:5432/pansoham
+    volumes:
+      - ./server:/app
+      - media:/media
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  media:

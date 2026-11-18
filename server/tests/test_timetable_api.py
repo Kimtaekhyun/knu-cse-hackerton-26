@@ -1,10 +1,11 @@
 import pytest
+from fastapi.testclient import TestClient
+
 from app.api.v1 import timetable as timetable_api
 from app.main import app
 from app.schemas.timetable import Slot, Subject
 from app.services import timetable_ocr
 from app.services.gemini import GeminiError
-from fastapi.testclient import TestClient
 
 URL = "/api/v1/timetable/parse"
 client = TestClient(app)
