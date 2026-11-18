@@ -4,16 +4,37 @@
 인식 결과를 그대로 저장 요청에 넣을 수 있다.
 """
 
+import unicodedata
 import uuid
 from typing import Annotated
 
-from pydantic import BaseModel, Field, StringConstraints, model_validator
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints, model_validator
 
 from app.models import SemesterTerm
 
 HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
 
-SubjectName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+# 요청 크기 상한. 한 학기 과목 · 한 과목 시간 칸이 이보다 많을 일은 없다
+MAX_SUBJECTS = 50
+MAX_SLOTS = 20
+
+
+def _clean_name(name: str) -> str:
+    """한글을 NFC로 맞추고 제어 문자(NUL · 줄바꿈 등)를 거절한다.
+
+    iOS 입력과 서버 인식 결과의 정규화가 다르면 눈에 같은 '자료구조'가
+    다른 문자열이 되어 중복 검사 · 이름 병합을 피해 간다. NUL은 Postgres에 넣을 수 없다.
+    """
+    if any(unicodedata.category(ch) == "Cc" for ch in name):
+        raise ValueError("과목 이름에 쓸 수 없는 문자가 있어요.")
+    return unicodedata.normalize("NFC", name)
+
+
+SubjectName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
+    AfterValidator(_clean_name),
+]
 
 
 class Slot(BaseModel):
@@ -33,14 +54,14 @@ class Slot(BaseModel):
 
 class SubjectIn(BaseModel):
     name: SubjectName
-    slots: list[Slot] = []
+    slots: list[Slot] = Field(default=[], max_length=MAX_SLOTS)
 
 
 class SubjectUpdate(BaseModel):
     """보낸 것만 바꾼다. slots를 보내면 시간 칸 전체를 바꾼다"""
 
     name: SubjectName | None = None
-    slots: list[Slot] | None = None
+    slots: list[Slot] | None = Field(default=None, max_length=MAX_SLOTS)
 
 
 class SubjectOut(BaseModel):
@@ -78,4 +99,4 @@ class SemesterDetail(SemesterOut):
 class TimetableSave(BaseModel):
     """시간표 확인 화면의 "이대로 저장". 이 목록이 그 학기 과목 전체가 된다"""
 
-    subjects: list[SubjectIn]
+    subjects: list[SubjectIn] = Field(max_length=MAX_SUBJECTS)

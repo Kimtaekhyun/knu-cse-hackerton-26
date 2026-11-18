@@ -91,15 +91,21 @@ def set_current(db: Session, user: User, semester: Semester) -> None:
     db.flush()
 
 
+def semester_exists(db: Session, user: User, year: int, term: SemesterTerm) -> bool:
+    return (
+        db.scalar(
+            select(Semester.id).where(
+                Semester.user_id == user.id, Semester.year == year, Semester.term == term
+            )
+        )
+        is not None
+    )
+
+
 def create_semester(
     db: Session, user: User, year: int, term: SemesterTerm, make_current: bool
 ) -> Semester:
-    exists = db.scalar(
-        select(Semester.id).where(
-            Semester.user_id == user.id, Semester.year == year, Semester.term == term
-        )
-    )
-    if exists:
+    if semester_exists(db, user, year, term):
         raise HTTPException(409, f"{year}년 {TERM_LABELS[term]}은 이미 있어요.")
     semester = Semester(user_id=user.id, year=year, term=term, is_current=False)
     db.add(semester)
@@ -129,19 +135,34 @@ def save_timetable(db: Session, semester: Semester, subjects: list[SubjectIn]) -
     - 이름이 같은 과목은 그대로 두고 시간 칸만 바꾼다 (그 과목 판서가 유지되도록)
     - 목록에 없는 과목은 지운다. 그 과목 판서는 미분류함으로 간다 (DB의 SET NULL)
     - 목록 안에서 이름이 겹치면 시간 칸을 합친다 (인식 결과가 과목을 둘로 나눈 경우)
+    - 이미 같은 이름 과목이 여러 개 있으면(예전 동시 요청으로 생긴 것) 가장 먼저 만든 것만 남기고,
+      나머지의 판서는 남긴 과목으로 옮긴 뒤 지운다
     """
     merged: dict[str, list[Slot]] = {}
     for item in subjects:
         merged.setdefault(item.name, []).extend(item.slots)
 
-    existing = {s.name: s for s in semester.subjects}
+    kept: dict[str, Subject] = {}
+    duplicates: list[tuple[Subject, Subject]] = []  # (지울 과목, 판서를 옮길 과목)
+    for subject in sorted(semester.subjects, key=lambda s: (s.created_at, s.id)):
+        if subject.name not in kept:
+            kept[subject.name] = subject
+        else:
+            duplicates.append((subject, kept[subject.name]))
+
+    for duplicate, target in duplicates:
+        db.execute(
+            update(Capture).where(Capture.subject_id == duplicate.id).values(subject_id=target.id)
+        )
+        semester.subjects.remove(duplicate)
+
     for name, slots in merged.items():
-        subject = existing.pop(name, None)
+        subject = kept.pop(name, None)
         if subject is None:
             subject = Subject(name=name)
             semester.subjects.append(subject)
         subject.slots = to_slot_rows(slots)
-    for removed in existing.values():
+    for removed in kept.values():
         semester.subjects.remove(removed)
     db.flush()
 

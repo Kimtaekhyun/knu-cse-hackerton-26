@@ -58,6 +58,9 @@ def test_duplicate_subject_name_is_409(client, auth, db, semester):
         {"name": "자료구조", "slots": [{"weekday": 0, "start": "10:30", "end": "10:30"}]},
         {"name": "자료구조", "slots": [{"weekday": 0, "start": "9:00", "end": "10:30"}]},
         {"name": "자료구조", "slots": [{"weekday": 0, "start": "24:00", "end": "25:00"}]},
+        {"name": "자료\u0000구조"},  # NUL은 Postgres에 넣을 수 없음
+        {"name": "자료\n구조"},
+        {"name": "자료구조", "slots": [SLOT] * 21},
     ],
 )
 def test_invalid_subject_is_422(client, auth, semester, body):
@@ -136,3 +139,24 @@ def test_delete_subject_sends_captures_to_unsorted(client, auth, db, user, semes
     assert client.get(subject_url(subject), headers=auth).status_code == 404
     db.expire_all()
     assert db.get(Capture, capture.id).subject_id is None
+
+
+def test_name_is_normalized_to_nfc(client, auth, db, semester):
+    """iOS 입력(NFD)과 서버 인식 결과(NFC)가 달라도 같은 과목으로 본다"""
+    import unicodedata
+
+    nfc = "자료구조"
+    nfd = unicodedata.normalize("NFD", nfc)
+    assert nfc != nfd
+
+    created = client.post(subjects_url(semester), headers=auth, json={"name": nfd})
+    assert created.status_code == 201
+    assert created.json()["name"] == nfc
+    again = client.post(subjects_url(semester), headers=auth, json={"name": nfc})
+    assert again.status_code == 409
+
+
+def test_too_many_slots_in_update_is_422(client, auth, db, semester):
+    subject = make_subject(db, semester)
+    response = client.patch(subject_url(subject), headers=auth, json={"slots": [SLOT] * 21})
+    assert response.status_code == 422

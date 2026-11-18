@@ -60,3 +60,18 @@ def get_current_user(db: DbDep, x_user_id: Annotated[uuid.UUID | None, Header()]
 
 
 UserDep = Annotated[User, Depends(get_current_user)]
+
+
+def get_writing_user(db: DbDep, user: UserDep) -> User:
+    """데이터를 바꾸는 요청용. 사용자 행을 잠가서 같은 사용자의 쓰기 요청을 한 줄로 세운다.
+
+    "있는지 확인 → 저장" 사이에 다른 요청이 끼어들면 같은 과목이 두 번 생기거나
+    현재 학기 · 학기 중복 제약에 걸려 500이 난다 (버튼 두 번 누르기, 앱의 재요청).
+    잠금은 커밋 · 롤백 때 풀린다. FOR NO KEY UPDATE라 판서 저장처럼
+    이 사용자를 외래 키로 가리키는 INSERT는 막지 않는다.
+    """
+    db.execute(select(User.id).where(User.id == user.id).with_for_update(key_share=True))
+    return user
+
+
+WriteUserDep = Annotated[User, Depends(get_writing_user)]

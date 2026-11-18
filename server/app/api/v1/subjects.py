@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter
 
-from app.api.deps import DbDep, UserDep
+from app.api.deps import DbDep, UserDep, WriteUserDep
 from app.schemas.semester import SubjectOut, SubjectUpdate
 from app.services import semesters as service
 
@@ -18,7 +18,7 @@ def get_subject(subject_id: uuid.UUID, db: DbDep, user: UserDep):
 
 
 @router.patch("/{subject_id}", response_model=SubjectOut)
-def update_subject(subject_id: uuid.UUID, body: SubjectUpdate, db: DbDep, user: UserDep):
+def update_subject(subject_id: uuid.UUID, body: SubjectUpdate, db: DbDep, user: WriteUserDep):
     """이름 · 시간 칸 수정. 보낸 것만 바꾼다"""
     subject = service.get_subject(db, user, subject_id)
     if body.name is not None and body.name != subject.name:
@@ -32,7 +32,7 @@ def update_subject(subject_id: uuid.UUID, body: SubjectUpdate, db: DbDep, user: 
 
 
 @router.delete("/{subject_id}", status_code=204)
-def delete_subject(subject_id: uuid.UUID, db: DbDep, user: UserDep):
+def delete_subject(subject_id: uuid.UUID, db: DbDep, user: WriteUserDep):
     """과목 삭제. 그 과목 판서는 지우지 않고 미분류함으로 보낸다"""
     db.delete(service.get_subject(db, user, subject_id))
     db.commit()

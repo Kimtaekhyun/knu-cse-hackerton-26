@@ -205,3 +205,49 @@ def test_save_empty_timetable_removes_all_subjects(client, auth, db, user):
 
     response = client.put(f"{URL}/{semester.id}/timetable", headers=auth, json={"subjects": []})
     assert response.json()["subjects"] == []
+
+
+def test_save_timetable_cleans_up_duplicate_subjects(client, auth, db, user):
+    """예전 동시 요청으로 같은 이름 과목이 여러 개 생긴 경우 하나로 정리하고 판서는 모은다"""
+    semester = make_semester(db, user)
+    first = make_subject(db, semester, name="자료구조")
+    second = make_subject(db, semester, name="자료구조")
+    stale = make_subject(db, semester, name="이산수학")
+    make_subject(db, semester, name="이산수학")
+    on_first = make_capture(db, user, semester, first)
+    on_second = make_capture(db, user, semester, second)
+    on_stale = make_capture(db, user, semester, stale)
+    db.commit()
+
+    response = client.put(
+        f"{URL}/{semester.id}/timetable", headers=auth, json={"subjects": [{"name": "자료구조"}]}
+    )
+    assert response.status_code == 200
+    (subject,) = response.json()["subjects"]
+    assert subject["id"] == str(first.id)
+    assert subject["capture_count"] == 2
+
+    db.expire_all()
+    assert db.get(Capture, on_first.id).subject_id == first.id
+    assert db.get(Capture, on_second.id).subject_id == first.id
+    assert db.get(Capture, on_stale.id).subject_id is None  # 목록에서 빠진 과목 → 미분류
+    names = db.scalars(select(Subject.name).where(Subject.semester_id == semester.id)).all()
+    assert names == ["자료구조"]
+
+
+def test_too_many_subjects_is_422(client, auth):
+    semester = create(client, auth).json()
+    body = {"subjects": [{"name": f"과목{i}"} for i in range(51)]}
+    response = client.put(f"{URL}/{semester['id']}/timetable", headers=auth, json=body)
+    assert response.status_code == 422
+
+
+def test_unique_violation_is_409_not_500(client, auth, monkeypatch):
+    """API의 중복 확인을 피해 간 경우에도 DB 제약 위반은 409로 돌려준다"""
+    from app.services import semesters as service
+
+    create(client, auth)
+    monkeypatch.setattr(service, "semester_exists", lambda *args: False)
+    response = create(client, auth)
+    assert response.status_code == 409
+    assert response.json()["detail"] == "이미 같은 항목이 있어요."

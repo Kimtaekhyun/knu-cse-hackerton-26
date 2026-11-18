@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter
 from sqlalchemy import select
 
-from app.api.deps import DbDep, UserDep
+from app.api.deps import DbDep, UserDep, WriteUserDep
 from app.models import Semester, Subject
 from app.schemas.semester import (
     SemesterCreate,
@@ -32,7 +32,7 @@ def list_semesters(db: DbDep, user: UserDep):
 
 
 @router.post("", response_model=SemesterDetail, status_code=201)
-def create_semester(body: SemesterCreate, db: DbDep, user: UserDep):
+def create_semester(body: SemesterCreate, db: DbDep, user: WriteUserDep):
     semester = service.create_semester(db, user, body.year, body.term, body.make_current)
     db.commit()
     return service.semester_detail(db, service.get_semester(db, user, semester.id))
@@ -51,7 +51,7 @@ def get_semester(semester_id: uuid.UUID, db: DbDep, user: UserDep):
 
 
 @router.put("/{semester_id}/current", response_model=SemesterOut)
-def set_current(semester_id: uuid.UUID, db: DbDep, user: UserDep):
+def set_current(semester_id: uuid.UUID, db: DbDep, user: WriteUserDep):
     """이 학기를 현재 학기로. 기존 현재 학기는 지난 학기가 된다"""
     semester = service.get_semester(db, user, semester_id)
     service.set_current(db, user, semester)
@@ -61,14 +61,14 @@ def set_current(semester_id: uuid.UUID, db: DbDep, user: UserDep):
 
 
 @router.delete("/{semester_id}", status_code=204)
-def delete_semester(semester_id: uuid.UUID, db: DbDep, user: UserDep):
+def delete_semester(semester_id: uuid.UUID, db: DbDep, user: WriteUserDep):
     """학기 삭제. 그 학기 과목 · 판서 · 카드도 같이 지워진다"""
     db.delete(service.get_semester(db, user, semester_id))
     db.commit()
 
 
 @router.put("/{semester_id}/timetable", response_model=SemesterDetail)
-def save_timetable(semester_id: uuid.UUID, body: TimetableSave, db: DbDep, user: UserDep):
+def save_timetable(semester_id: uuid.UUID, body: TimetableSave, db: DbDep, user: WriteUserDep):
     """시간표 확인 화면의 "이대로 저장". 보낸 목록이 그 학기 과목 전체가 된다
 
     이름이 같은 과목은 유지(판서도 유지)하고, 빠진 과목은 지운다(판서는 미분류함으로).
@@ -80,7 +80,7 @@ def save_timetable(semester_id: uuid.UUID, body: TimetableSave, db: DbDep, user:
 
 
 @router.post("/{semester_id}/subjects", response_model=SubjectOut, status_code=201)
-def create_subject(semester_id: uuid.UUID, body: SubjectIn, db: DbDep, user: UserDep):
+def create_subject(semester_id: uuid.UUID, body: SubjectIn, db: DbDep, user: WriteUserDep):
     semester = service.get_semester(db, user, semester_id)
     service.ensure_unique_name(semester, body.name)
     subject = Subject(name=body.name, slots=service.to_slot_rows(body.slots))
