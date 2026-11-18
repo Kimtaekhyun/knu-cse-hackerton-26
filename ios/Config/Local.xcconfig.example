@@ -1,0 +1,11 @@
+// 이 파일을 복사해 Local.xcconfig로 만들고 내 값을 적는다. Local.xcconfig는 git에 올라가지 않는다.
+
+// 내 Personal Team ID (README · #22의 "내 Team ID 확인" 참고)
+DEVELOPMENT_TEAM = XXXXXXXXXX
+// 사람마다 달라야 한다 (Apple ID끼리도 중복 불가)
+PRODUCT_BUNDLE_IDENTIFIER = com.myname.pansoham
+
+// 실기기 iPad로 테스트할 때만: docker compose를 띄운 Mac의 주소
+// Wi-Fi IP는 `ipconfig getifaddr en0`, Mac 이름은 시스템 설정 › 일반 › 공유 › 로컬 호스트 이름
+// 시뮬레이터만 쓰면 이 줄을 지운다 (localhost 사용)
+API_BASE_URL = http:/$()/my-macbook.local:8000

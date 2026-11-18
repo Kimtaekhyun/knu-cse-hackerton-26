@@ -8,14 +8,16 @@
 import SwiftUI
 
 enum APIConfig {
-    /// 서버 주소. 실행 인자에 `-apiBaseURL http://192.168.0.10:8000` 처럼 넣으면 그 주소를 써요.
-    /// 없으면 시뮬레이터에서 같은 Mac 의 서버로 가는 `http://localhost:8000`.
-    static var baseURL: URL {
-        if let text = UserDefaults.standard.string(forKey: "apiBaseURL"), let url = URL(string: text) {
+    /// 서버 주소. `ios/Config/*.xcconfig` 의 `API_BASE_URL` 이 Info.plist 를 거쳐 들어와요 (#22).
+    /// 실기기 iPad 는 각자 `Local.xcconfig` 에 서버 Mac 주소를 적어요.
+    /// 스킴 실행 인자로는 바꾸지 않아요 (공유 스킴에 개인 IP 가 커밋되는 문제가 있었음).
+    static let baseURL: URL = {
+        if let text = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String,
+           !text.isEmpty, let url = URL(string: text) {
             return url
         }
         return URL(string: "http://localhost:8000")!
-    }
+    }()
 }
 
 enum APIError: LocalizedError {
