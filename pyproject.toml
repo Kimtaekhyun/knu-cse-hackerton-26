@@ -9,3 +9,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.ruff.lint.isort]
+# server/app 은 어디서 ruff를 실행해도 이 프로젝트 패키지로 본다 (import 정렬이 실행 위치마다 달라지지 않게)
+known-first-party = ["app"]

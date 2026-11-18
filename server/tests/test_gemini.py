@@ -1,10 +1,11 @@
 from types import SimpleNamespace
 
 import pytest
-from app.services import gemini
-from app.services.gemini import GeminiError, ask_json
 from google.genai import errors
 from pydantic import BaseModel
+
+from app.services import gemini
+from app.services.gemini import GeminiError, ask_json
 
 
 class Dummy(BaseModel):

@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.5-flash-lite"
     # 시간표 추출 모델. 정확도가 더 중요해서 따로 바꿀 수 있게 둔다
     timetable_model: str = "gemini-3.5-flash-lite"
+    # 로컬에서 uv로 실행할 때 기본값. docker compose 안에서는 DATABASE_URL로 db 컨테이너를 가리킨다
+    database_url: str = "postgresql+psycopg://pansoham:pansoham@localhost:5432/pansoham"
 
 
 @lru_cache

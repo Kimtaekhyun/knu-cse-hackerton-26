@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+
 from app.services.timetable_ocr import (
     BlockBox,
     HourMark,
