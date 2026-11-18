@@ -14,7 +14,10 @@ Team repository for the Kyungpook National University School of Computer Science
 - Lint: `uvx ruff check .`
 - Format: `uvx ruff format .`
 - A hook runs ruff automatically whenever a `.py` file is edited (except in experiments)
-- Server: `cd server && uv sync`, run `uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`, test `uv run pytest`. Settings are read from the repo-root `.env` (see `.env.example`)
+- Server (BE and FE alike): `docker compose up` from the repo root starts Postgres + the API at `localhost:8000`. On start the API runs `alembic upgrade head`, and `./server` is mounted with `--reload`, so code edits apply without rebuilding. Rebuild only after dependency changes: `docker compose up --build`. Reset the DB: `docker compose down -v`
+- Server tests: `docker compose exec api uv run --no-sync pytest` (DB tests use the `pansoham_test` database and are skipped if Postgres is unreachable; `REQUIRE_DB=1` makes that a failure)
+- New migration after changing models in `server/app/models/`: `docker compose exec api uv run --no-sync alembic revision --autogenerate -m "..."`, then review the file in `server/alembic/versions/`
+- Settings come from the repo-root `.env` (see `.env.example`); `GEMINI_API_KEY` is only needed for timetable recognition
 
 ## Collaboration Rules
 - Do not push directly to main. Branch → PR → merge after review. The user merges themselves.
