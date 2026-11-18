@@ -93,31 +93,12 @@ struct AccountScreen: View {
                 draftSchool = school
                 editingProfile = true
             }
-            Color.clear.frame(width: 1, height: 24)
-            HStack(alignment: .top) {
-                stat("28", "찍은 판서")
-                Spacer()
-                stat("96", "정리된 카드")
-                Spacer()
-                stat("81", "옮긴 카드")
-            }
         }
-        .padding(.top, 28)
-        .padding(.bottom, 24)
         .padding(.horizontal, 24)
-        .frame(width: width)
+        // 통계 숫자를 뺀 뒤에도 카드 높이(피그마 368)는 그대로 두고, 남은 내용을 위아래 가운데에 둬요.
+        .frame(width: width, height: 368)
         .background(Color.dsPanel)
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-    }
-
-    private func stat(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(.system(size: 24, weight: .bold))
-                .tracking(-0.6)
-                .foregroundStyle(.black)
-            Text(label).ds(12, .medium, .dsSub)
-        }
     }
 
     // MARK: 설정 묶음
