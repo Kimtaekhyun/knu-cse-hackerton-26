@@ -1,15 +1,19 @@
 import SwiftUI
 
-/// 지금 보여 줄 화면을 고르는 곳. 화면 이동은 Router 가 맡아요.
+/// 지금 보여 줄 화면을 고르는 곳.
 struct ContentView: View {
     @State private var router = Router()
 
     var body: some View {
-        screen
-            .id(router.current)
-            .transition(.opacity)
-            .animation(.easeInOut(duration: 0.2), value: router.current)
-            .environment(router)
+        ZStack {
+            screen
+                .id(router.current)
+                .transition(NavTransition(router: router))
+                .zIndex(Double(router.direction.drawsBelow ? -router.moves : router.moves))
+        }
+        .animation(router.direction.animation, value: router.current)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { router.bounds = $0 }
+        .environment(router)
             .preferredColorScheme(.light)
     }
 

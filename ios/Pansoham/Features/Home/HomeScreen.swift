@@ -42,6 +42,7 @@ struct HomeScreen: View {
                     .shadow(color: .black.opacity(0.22), radius: 14, x: 0, y: 10)
             }
             .buttonStyle(.plain)
+            .zoomSource()
             .at(1082, 722)
 
             if isFirst {
@@ -55,6 +56,7 @@ struct HomeScreen: View {
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
                     .buttonStyle(.plain)
+                    .zoomSource()
                     .at(910, 664)
                     Image("tooltip-tail").at(1109, 706)
                 }
@@ -249,29 +251,29 @@ struct HomeScreen: View {
                     SubjectCard(name: "자료구조", detail: "월 10:30–12:00", count: counts[0], style: .blue) {
                         router.push(isFirst ? .subjectEmpty : .subjectLessons)
                     }
-                    .entrance(shown, delay: 0.10, duration: 0.45, y: 18)
+                    .entrance(appeared, delay: 0.10, duration: 0.4, y: 16)
                     SubjectCard(name: "컴퓨터구조", detail: "화 13:00–14:30", count: counts[1]) {
                         router.push(isFirst ? .subjectEmpty : .subjectLessons)
                     }
-                    .entrance(shown, delay: 0.17, duration: 0.45, y: 18)
+                    .entrance(appeared, delay: 0.17, duration: 0.4, y: 16)
                     SubjectCard(name: "확률과 통계", detail: "수 09:00–10:30", count: counts[2]) {
                         router.push(isFirst ? .subjectEmpty : .subjectLessons)
                     }
-                    .entrance(shown, delay: 0.24, duration: 0.45, y: 18)
+                    .entrance(appeared, delay: 0.24, duration: 0.4, y: 16)
                 }
                 HStack(spacing: 19) {
                     SubjectCard(name: "이산수학", detail: "목 15:00–16:30", count: counts[3]) {
                         router.push(isFirst ? .subjectEmpty : .subjectLessons)
                     }
-                    .entrance(shown, delay: 0.31, duration: 0.45, y: 18)
+                    .entrance(appeared, delay: 0.31, duration: 0.4, y: 16)
                     SubjectCard(name: "운영체제", detail: "금 10:30–12:00", count: counts[4]) {
                         router.push(.subjectEmpty)
                     }
-                    .entrance(shown, delay: 0.38, duration: 0.45, y: 18)
+                    .entrance(appeared, delay: 0.38, duration: 0.4, y: 16)
                     SubjectCard(name: "미분류함", detail: "시간표 밖에서 찍은 판서", count: counts[5], style: .dashed) {
                         router.push(.unsorted)
                     }
-                    .entrance(shown, delay: 0.45, duration: 0.45, y: 18)
+                    .entrance(appeared, delay: 0.45, duration: 0.4, y: 16)
                 }
             }
 
@@ -390,7 +392,7 @@ extension HomeScreen {
                                 router.push(folder.to)
                             }
                             .scaledBox(236, 166, to: cardWidth)
-                            .entrance(shown, delay: 0.1 + 0.07 * Double(index), duration: 0.45, y: 18)
+                            .entrance(appeared, delay: 0.1 + 0.07 * Double(index), duration: 0.4, y: 16)
                         }
                     }
 

@@ -116,7 +116,7 @@ struct FolderMenu: View {
     var body: some View {
         Button { router.push(.capture) } label: { Label("판서 찍기", systemImage: "camera") }
         if let switchTo {
-            Button { router.replace(switchTo.screen) } label: {
+            Button { router.replace(switchTo.screen, direction: .fade) } label: {
                 Label(switchTo.title, systemImage: "rectangle.grid.1x2")
             }
         }
@@ -186,6 +186,7 @@ struct CaptureFAB: View {
                 .shadow(color: .black.opacity(0.22), radius: 14, x: 0, y: 10)
         }
         .buttonStyle(.plain)
+        .zoomSource()
         .at(1082, 722)
     }
 }
@@ -255,7 +256,7 @@ struct SubjectLessonsScreen: View {
                 FolderMenu(router: router, switchTo: ("카드 모아 보기", .subjectCards))
             }
             SubjectHeader(name: "자료구조", detail: "월 10:30–12:00 · 판서 12장 · 카드 34개", mode: 0) { mode in
-                if mode == 1 { router.replace(.subjectCards) }
+                if mode == 1 { router.replace(.subjectCards, direction: .fade) }
             }
 
             // 수업 목록
@@ -357,7 +358,7 @@ struct SubjectCardsScreen: View {
                 FolderMenu(router: router, switchTo: ("수업별로 보기", .subjectLessons))
             }
             SubjectHeader(name: "자료구조", detail: "월 10:30–12:00 · 판서 12장 · 카드 34개", mode: 1) { mode in
-                if mode == 0 { router.replace(.subjectLessons) }
+                if mode == 0 { router.replace(.subjectLessons, direction: .fade) }
             }
 
             // 필터
@@ -457,7 +458,7 @@ struct SubjectEmptyScreen: View {
                 Color.clear.frame(width: 1, height: 8)
                 Text("금요일 10:30 수업 시간에 찍으면 여기로 모여요").ds(17, .regular, .dsSub)
                 Color.clear.frame(width: 1, height: 28)
-                PrimaryButton(title: "판서 찍기") { router.push(.capture) }
+                PrimaryButton(title: "판서 찍기") { router.push(.capture) }.zoomSource()
             }
             .frame(width: DS.width)
             .at(0, 330)
@@ -479,7 +480,7 @@ extension SubjectLessonsScreen {
         }, content: {
             if searching { FolderSearchField(text: $query) { searching = false; query = "" } }
             NarrowModeToggle(mode: 0) { mode in
-                if mode == 1 { router.replace(.subjectCards) }
+                if mode == 1 { router.replace(.subjectCards, direction: .fade) }
             }
 
             VStack(alignment: .leading, spacing: 0) {
@@ -546,7 +547,7 @@ extension SubjectCardsScreen {
         }, content: {
             if searching { FolderSearchField(text: $query) { searching = false; query = "" } }
             NarrowModeToggle(mode: 1) { mode in
-                if mode == 0 { router.replace(.subjectLessons) }
+                if mode == 0 { router.replace(.subjectLessons, direction: .fade) }
             }
 
             Flow(spacing: 8) {
@@ -649,7 +650,7 @@ extension SubjectEmptyScreen {
                     .dsWrap(15, .regular, .dsSub)
                     .multilineTextAlignment(.center)
                 Color.clear.frame(width: 1, height: 24)
-                PrimaryButton(title: "판서 찍기") { router.push(.capture) }
+                PrimaryButton(title: "판서 찍기") { router.push(.capture) }.zoomSource()
             }
             .frame(maxWidth: .infinity)
             .padding(.top, size.height * 0.14)
