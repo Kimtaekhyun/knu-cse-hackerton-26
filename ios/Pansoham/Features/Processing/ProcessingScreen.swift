@@ -13,6 +13,13 @@ struct ProcessingScreen: View {
     @Environment(Router.self) private var router
     @State private var phase = 0         // 0 판서 펴기, 1 글씨 찾기, 2 수식 정리
     @State private var phaseStart = Date()   // 지금 단계가 시작된 때
+    /// 여러 장일 때 지금 처리 중인 사진 (0부터). 한 장씩 차례로 처리해요 (10-2).
+    @State private var current = 0
+
+    /// 메인 `앨범에서 선택` 으로 고른 사진들. 촬영 화면에서 오면 비어 있어요.
+    private var photos: [UIImage] { router.albumPhotos }
+    private var total: Int { max(1, photos.count) }
+    private var isBatch: Bool { photos.count > 1 }
 
     private let titles = ["판서를 반듯하게 펴고 있어요", "글씨와 수식을 찾고 있어요", "수식으로 정리하고 있어요"]
     private let details = ["기울기와 빛 반사를 지우는 중", "4곳 중 3곳 발견", "찾은 내용을 텍스트와 수식(LaTeX)으로 바꾸는 중"]
@@ -66,14 +73,76 @@ struct ProcessingScreen: View {
                 .frame(width: DS.width)
                 .at(0, 532)
 
-            Button { router.pop() } label: {
-                Text("취소").ds(17, .medium, .dsSub)
-                    .frame(width: 120, height: 44)
+            if isBatch {
+                countPill.frame(width: DS.width).at(0, 18)
+                batchStrip.frame(width: DS.width).at(0, 664)
+            }
+
+            Button(action: cancel) {
+                Text(cancelTitle).ds(17, .medium, .dsSub)
+                    .frame(width: 160, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .at(537, 760)
+            .at(517, isBatch ? 770 : 760)
         }
+    }
+
+    // MARK: 여러 장 (10-2)
+
+    /// "3장 중 1장째"
+    private var countPill: some View {
+        Text("\(total)장 중 \(current + 1)장째").ds(13, .bold, .dsBlue)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(Color.dsBlueSoft, in: Capsule())
+    }
+
+    /// 사진별 상태: 끝남 · 정리 중 · 대기
+    private var batchStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 16) {
+                ForEach(photos.indices, id: \.self) { index in
+                    let state = index < current ? "완료" : index == current ? "정리 중" : "대기"
+                    VStack(spacing: 6) {
+                        Image(uiImage: photos[index])
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 88, height: 66)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay {
+                                if index == current {
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .strokeBorder(Color.dsBlue, lineWidth: 2.5)
+                                }
+                            }
+                            .opacity(index > current ? 0.45 : 1)
+                        Text("\(index + 1) · \(state)").ds(12, .bold, index == current ? .dsBlue : .dsSub)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .fixedSize(horizontal: photos.count <= 8, vertical: true)
+    }
+
+    private var cancelTitle: String { isBatch ? "나머지 취소" : "취소" }
+
+    /// 한 장일 때는 그냥 돌아가고, 여러 장일 때는 끝난 사진까지만 결과로 보여 줘요.
+    private func cancel() {
+        if isBatch && current > 0 {
+            finish(done: current)
+        } else {
+            router.albumPhotos = []
+            router.pop()
+        }
+    }
+
+    private func finish(done: Int) {
+        router.processedCount = max(1, done)
+        router.albumPhotos = []
+        router.replace(.result)
     }
 
     /// 지금 단계 설명 · 단계 표시 · 진행 막대
@@ -180,16 +249,24 @@ struct ProcessingScreen: View {
     }
 
     /// 세 단계를 차례로 보여 주고 결과 화면으로 넘어가요.
+    /// 여러 장이면 사진마다 되풀이해요. 두 번째 사진부터는 조금 빨리 넘어가요.
     private func run() async {
         do {
-            try await Task.sleep(for: .seconds(1.8))
-            phaseStart = Date()
-            withAnimation(.easeInOut(duration: 0.45)) { phase = 1 }
-            try await Task.sleep(for: .seconds(1.8))
-            phaseStart = Date()
-            withAnimation(.easeInOut(duration: 0.45)) { phase = 2 }
-            try await Task.sleep(for: .seconds(2.4))
-            router.replace(.result)
+            for index in 0..<total {
+                let fast = index > 0
+                if fast {
+                    phaseStart = Date()
+                    withAnimation(.easeInOut(duration: 0.35)) { current = index; phase = 0 }
+                }
+                try await Task.sleep(for: .seconds(fast ? 1.0 : 1.8))
+                phaseStart = Date()
+                withAnimation(.easeInOut(duration: 0.45)) { phase = 1 }
+                try await Task.sleep(for: .seconds(fast ? 1.0 : 1.8))
+                phaseStart = Date()
+                withAnimation(.easeInOut(duration: 0.45)) { phase = 2 }
+                try await Task.sleep(for: .seconds(fast ? 1.4 : 2.4))
+            }
+            finish(done: total)
         } catch {
             // 화면을 벗어나면 그대로 멈춰요.
         }
@@ -221,14 +298,19 @@ extension ProcessingScreen {
                     }
 
                     status.scaleEffect(min(1, inner / 400), anchor: .top)
+
+                    if isBatch { batchStrip }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 28)
                 .padding(.bottom, 16)
             }
-            Button { router.pop() } label: {
-                Text("취소").ds(17, .medium, .dsSub)
-                    .frame(width: 120, height: 44)
+            .safeAreaInset(edge: .top) {
+                if isBatch { countPill.padding(.top, 8) }
+            }
+            Button(action: cancel) {
+                Text(cancelTitle).ds(17, .medium, .dsSub)
+                    .frame(width: 160, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
