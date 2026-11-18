@@ -65,7 +65,7 @@ struct LoginScreen: View {
                         .enter(t, at: 0, dur: 0.5, scale: 0.97, ease: .out)
                         .at(24, 24)
                     intro(t)
-                    buttons(t, width: 437).at(669, 523)
+                    buttons(t, width: 437).at(669, 593)
                     terms
                         .frame(width: 437)
                         .enter(t, at: 1.3, dur: 0.5, ease: .out)
@@ -112,11 +112,6 @@ struct LoginScreen: View {
 
     private func buttons(_ t: Double, width: CGFloat) -> some View {
         VStack(spacing: 12) {
-            loginButton(fill: .ink) {
-                Image("login-apple")
-                Text("Apple로 계속하기").v2(17, .bold, .white, tracking: -0.34)
-            }
-            .enter(t, at: 0.95, dy: 30)
             loginButton(fill: .kakao) {
                 Image("login-kakao")
                 Text("카카오로 계속하기").v2(17, .bold, .black.opacity(0.85), tracking: -0.34)
@@ -307,7 +302,7 @@ extension LoginScreen {
                         .enter(t, at: 0, dur: 0.5, scale: 0.97, ease: .out)
                         .at(24, 24)
                     intro(t, x: 48, y: 600)
-                    buttons(t, width: 738).at(48, 919)
+                    buttons(t, width: 738).at(48, 989)
                     terms
                         .frame(width: 738)
                         .enter(t, at: 1.3, dur: 0.5, ease: .out)
