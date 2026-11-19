@@ -1,7 +1,6 @@
 """로그인 토큰(Authorization: Bearer)으로 현재 사용자를 찾는 FastAPI 의존성.
 
-학기 · 과목 API(#50)의 app/api/deps.py get_current_user를 이 함수로 바꿔 끼우면
-모든 API가 로그인한 사용자 기준으로 동작한다.
+app/api/deps.py의 UserDep · WriteUserDep가 이 함수를 쓴다.
 """
 
 from typing import Annotated
