@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, time
 
-from sqlalchemy import CheckConstraint, ForeignKey, SmallInteger
+from sqlalchemy import CheckConstraint, ForeignKey, SmallInteger, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -15,6 +15,8 @@ class Subject(Base):
     """강의실은 저장하지 않는다. 슬롯이 0개인 과목 = 사이버강의 등 (자동 분류 대상 아님)"""
 
     __tablename__ = "subjects"
+    # 같은 학기에 같은 이름 과목은 하나만 (동시 요청 중복 방지의 마지막 방어선, #50)
+    __table_args__ = (UniqueConstraint("semester_id", "name"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
     semester_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("semesters.id", ondelete="CASCADE"))
