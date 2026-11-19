@@ -25,10 +25,13 @@ enum APIError: LocalizedError {
     case server(String)
     case unreachable
     case invalidResponse
+    /// 로그인 토큰이 만료되거나 무효예요 (다시 로그인해야 해요)
+    case unauthorized
 
     var errorDescription: String? {
         switch self {
         case .server(let message): message
+        case .unauthorized: "로그인이 만료됐어요. 다시 로그인해 주세요."
         case .unreachable: "서버에 연결할 수 없어요. 서버가 켜져 있는지 확인해 주세요."
         case .invalidResponse: "서버 응답을 읽지 못했어요."
         }
@@ -56,17 +59,49 @@ enum APIClient {
         var request = URLRequest(url: APIConfig.baseURL.appending(path: path), timeoutInterval: timeout)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        return try await send(request, as: type)
+    }
+
+    /// JSON 본문을 보내고 JSON 답을 `type` 으로 읽어요.
+    static func json<B: Encodable, T: Decodable>(_ method: String, path: String, body: B,
+                                                 as type: T.Type, timeout: TimeInterval = 30) async throws -> T {
+        var request = URLRequest(url: APIConfig.baseURL.appending(path: path), timeoutInterval: timeout)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        return try await send(request, as: type)
+    }
+
+    /// 본문 없이 보내고 JSON 답을 `type` 으로 읽어요 (GET 등).
+    static func json<T: Decodable>(_ method: String, path: String,
+                                   as type: T.Type, timeout: TimeInterval = 30) async throws -> T {
+        var request = URLRequest(url: APIConfig.baseURL.appending(path: path), timeoutInterval: timeout)
+        request.httpMethod = method
+        return try await send(request, as: type)
+    }
+
+    /// 로그인 토큰을 붙여 보내고 답을 읽어요.
+    /// 토큰을 붙여 보낸 요청이 401이면 토큰이 만료 · 무효라서 로그아웃 처리하고 `.unauthorized` 를 던져요.
+    private static func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
+        var request = request
+        let token = AuthSession.shared.accessToken
+        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
 
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.upload(for: request, from: body)
+            (data, response) = try await URLSession.shared.data(for: request)
         } catch is URLError {
             throw APIError.unreachable
         }
 
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 401, token != nil {
+                AuthSession.shared.didExpire()
+                throw APIError.unauthorized
+            }
             if let failure = try? JSONDecoder().decode(ServerFailure.self, from: data) {
                 throw APIError.server(failure.detail)
             }

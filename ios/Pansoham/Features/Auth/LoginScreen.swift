@@ -50,12 +50,40 @@ private extension View {
 
 struct LoginScreen: View {
     @Environment(Router.self) private var router
+    /// 카카오 로그인 중이면 버튼을 막고 돌아가는 표시를 보여 줘요.
+    @State private var loggingIn = false
+    @State private var errorMessage: String?
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
+            .alert("로그인하지 못했어요", isPresented: Binding(
+                get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
     }
 
+    /// 이메일 로그인은 아직 없어요 (#58 범위 밖). 지금은 예전처럼 다음 화면으로만 넘어가요.
     private func next() { router.push(.timetableUpload) }
+
+    /// 카카오 로그인 → 서버 토큰 저장 → 처음 가입이면 시간표 등록, 아니면 홈
+    private func loginWithKakao() {
+        guard !loggingIn else { return }
+        loggingIn = true
+        Task {
+            defer { loggingIn = false }
+            do {
+                let isNewUser = try await AuthSession.shared.loginWithKakao()
+                router.reset(to: isNewUser ? .timetableUpload : .home)
+            } catch KakaoLoginError.cancelled {
+                // 사용자가 닫은 경우는 안내하지 않아요
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
 
     private var wide: some View {
         DesignCanvas {
@@ -112,23 +140,28 @@ struct LoginScreen: View {
 
     private func buttons(_ t: Double, width: CGFloat) -> some View {
         VStack(spacing: 12) {
-            loginButton(fill: .kakao) {
-                Image("login-kakao")
+            loginButton(fill: .kakao, action: loginWithKakao) {
+                if loggingIn {
+                    ProgressView().tint(.black.opacity(0.85))
+                } else {
+                    Image("login-kakao")
+                }
                 Text("카카오로 계속하기").v2(17, .bold, .black.opacity(0.85), tracking: -0.34)
             }
             .enter(t, at: 1.05, dy: 30)
-            loginButton(fill: .white, stroke: .border) {
+            loginButton(fill: .white, stroke: .border, action: next) {
                 Text("이메일로 계속하기").v2(17, .bold, .ink, tracking: -0.34)
             }
             .enter(t, at: 1.15, dy: 30)
         }
+        .disabled(loggingIn)
         .frame(width: width)
     }
 
-    private func loginButton<Label: View>(fill: Color, stroke: Color? = nil,
+    private func loginButton<Label: View>(fill: Color, stroke: Color? = nil, action: @escaping () -> Void,
                                           @ViewBuilder label: () -> Label) -> some View {
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
-        return Button { next() } label: {
+        return Button(action: action) {
             HStack(spacing: 10) { label() }
                 .frame(maxWidth: .infinity)
                 .frame(height: 58)

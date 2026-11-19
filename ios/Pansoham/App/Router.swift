@@ -61,6 +61,9 @@ final class Router {
         // 특정 화면부터 열어 보기: 실행 인자에 `-startScreen home` 처럼 화면 이름을 넣어요.
         if let name = UserDefaults.standard.string(forKey: "startScreen"), let screen = Screen(rawValue: name) {
             stack = [screen]
+        } else if AuthSession.shared.isLoggedIn {
+            // 저장된 로그인이 있으면 바로 홈. 토큰이 무효면 `ContentView` 가 로그인 화면으로 보내요.
+            stack = [.home]
         }
     }
 

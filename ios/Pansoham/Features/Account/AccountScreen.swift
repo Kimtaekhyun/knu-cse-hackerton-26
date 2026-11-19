@@ -32,10 +32,17 @@ struct AccountScreen: View {
             }
             .alert("계정을 삭제할까요?", isPresented: $confirmingDelete) {
                 Button("취소", role: .cancel) {}
-                Button("삭제", role: .destructive) { router.reset(to: .login, direction: .fade) }
+                // 서버 계정 삭제 API는 아직 없어요 (#58 범위 밖). 지금은 로그아웃만 해요.
+                Button("삭제", role: .destructive) { logout() }
             } message: {
                 Text("찍은 판서와 카드가 모두 지워지고 되돌릴 수 없어요.")
             }
+    }
+
+    /// 저장된 로그인 토큰과 카카오 로그인을 지우고 로그인 화면으로
+    private func logout() {
+        AuthSession.shared.logout()
+        router.reset(to: .login, direction: .fade)
     }
 
     private var wide: some View {
@@ -63,7 +70,7 @@ struct AccountScreen: View {
                 toggleRow("옮기지 않은 판서 알림", isOn: $pendingAlert)
             }
             group("계정", width) {
-                row("로그아웃") { router.reset(to: .login, direction: .fade) }
+                row("로그아웃") { logout() }
                 divider
                 row("계정 삭제", color: .dsSub) { confirmingDelete = true }
             }
