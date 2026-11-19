@@ -128,8 +128,6 @@ struct TimetableConfirmScreen: View {
     /// 고치는 중인 과목 (nil 이면 새 과목 추가)
     @State private var editingID: UUID?
     @State private var showEditor = false
-    @State private var draftName = ""
-    @State private var draftTime = ""
     /// 원본 사진 크게 보기
     @State private var showOriginal = false
 
@@ -140,11 +138,11 @@ struct TimetableConfirmScreen: View {
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
             .task { if load == .idle { await analyze() } }
-            .alert(editingID == nil ? "과목 추가" : "과목 고치기", isPresented: $showEditor) {
-                TextField("과목 이름", text: $draftName)
-                TextField("요일 · 시간 (예: 월 10:30–12:00)", text: $draftTime)
-                Button("취소", role: .cancel) {}
-                Button(editingID == nil ? "추가" : "저장") { saveDraft() }
+            .sheet(isPresented: $showEditor) {
+                SubjectEditorSheet(subject: subjects.first { $0.id == editingID },
+                                   others: subjects.filter { $0.id != editingID }) { name, time in
+                    save(name: name, time: time)
+                }
             }
             .fullScreenCover(isPresented: $showOriginal) { OriginalPhotoView(image: router.timetableImage) }
     }
@@ -335,20 +333,16 @@ struct TimetableConfirmScreen: View {
     /// 과목 고치기 (nil 이면 새로 추가)
     func edit(_ subject: TimetableSubject?) {
         editingID = subject?.id
-        draftName = subject?.name ?? ""
-        draftTime = subject?.time ?? ""
         showEditor = true
     }
 
-    private func saveDraft() {
-        let name = draftName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else { return }
+    private func save(name: String, time: String) {
         withAnimation(.easeInOut(duration: 0.2)) {
             if let id = editingID, let i = subjects.firstIndex(where: { $0.id == id }) {
                 subjects[i].name = name
-                subjects[i].time = draftTime
+                subjects[i].time = time
             } else {
-                subjects.append(TimetableSubject(name: name, time: draftTime))
+                subjects.append(TimetableSubject(name: name, time: time))
             }
         }
     }
