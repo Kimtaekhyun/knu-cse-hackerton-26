@@ -135,26 +135,13 @@ def save_timetable(db: Session, semester: Semester, subjects: list[SubjectIn]) -
     - 이름이 같은 과목은 그대로 두고 시간 칸만 바꾼다 (그 과목 판서가 유지되도록)
     - 목록에 없는 과목은 지운다. 그 과목 판서는 미분류함으로 간다 (DB의 SET NULL)
     - 목록 안에서 이름이 겹치면 시간 칸을 합친다 (인식 결과가 과목을 둘로 나눈 경우)
-    - 이미 같은 이름 과목이 여러 개 있으면(예전 동시 요청으로 생긴 것) 가장 먼저 만든 것만 남기고,
-      나머지의 판서는 남긴 과목으로 옮긴 뒤 지운다
+    - 같은 학기 같은 이름 과목은 DB 제약으로 하나뿐이다 (예전 중복은 마이그레이션 0003이 정리)
     """
     merged: dict[str, list[Slot]] = {}
     for item in subjects:
         merged.setdefault(item.name, []).extend(item.slots)
 
-    kept: dict[str, Subject] = {}
-    duplicates: list[tuple[Subject, Subject]] = []  # (지울 과목, 판서를 옮길 과목)
-    for subject in sorted(semester.subjects, key=lambda s: (s.created_at, s.id)):
-        if subject.name not in kept:
-            kept[subject.name] = subject
-        else:
-            duplicates.append((subject, kept[subject.name]))
-
-    for duplicate, target in duplicates:
-        db.execute(
-            update(Capture).where(Capture.subject_id == duplicate.id).values(subject_id=target.id)
-        )
-        semester.subjects.remove(duplicate)
+    kept: dict[str, Subject] = {subject.name: subject for subject in semester.subjects}
 
     for name, slots in merged.items():
         subject = kept.pop(name, None)
