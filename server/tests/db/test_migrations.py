@@ -33,13 +33,18 @@ def test_0003_merges_duplicate_subjects(db):
     elsewhere = make_subject(db, other, name="자료구조")  # 다른 학기는 중복 아님
     on_first = make_capture(db, user, semester, first)
     on_second = make_capture(db, user, semester, second)
-    second_id = second.id  # 지워진 뒤에는 객체에서 읽을 수 없으므로 미리 꺼내 둔다
+    # 한 트랜잭션 안에서는 now()가 같아 순서가 무작위(UUID)가 되므로 생성 시각을 벌려 둔다
+    db.execute(
+        text("UPDATE subjects SET created_at = created_at + interval '1 second' WHERE id = :id"),
+        {"id": second.id},
+    )
+    first_id, second_id = first.id, second.id  # 지워진 뒤에는 객체에서 읽을 수 없으므로
 
     run_upgrade(db, "0003_subjects_unique_name.py")
 
     db.expire_all()
     remaining = set(db.scalars(select(Subject.id)).all())
-    assert {first.id, single.id, elsewhere.id} <= remaining
+    assert {first_id, single.id, elsewhere.id} <= remaining
     assert second_id not in remaining
-    assert db.get(Capture, on_first.id).subject_id == first.id
-    assert db.get(Capture, on_second.id).subject_id == first.id
+    assert db.get(Capture, on_first.id).subject_id == first_id
+    assert db.get(Capture, on_second.id).subject_id == first_id
