@@ -67,7 +67,11 @@ enum KakaoLogin {
         guard isConfigured else { throw KakaoLoginError.notConfigured }
         do {
             do {
-                return try await token { UserApi.shared.loginWithKakaoTalk(completion: $0) }
+                // 기본값(.UniversalLink)은 카카오톡이 없으면 Safari로 열려서 실패를 알려 주지 않는다.
+                // UniversalLinkOnly는 카카오톡이 없으면 NotSupported로 실패해서 카카오계정 로그인으로 넘어간다.
+                return try await token {
+                    UserApi.shared.loginWithKakaoTalk(launchMethod: .UniversalLinkOnly, completion: $0)
+                }
             } catch let error as SdkError where reason(error) == .NotSupported {
                 return try await token { UserApi.shared.loginWithKakaoAccount(completion: $0) }
             }
