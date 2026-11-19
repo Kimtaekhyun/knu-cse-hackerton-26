@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from app.db.session import get_db
 from app.main import app
 from app.models import Semester, Subject, User
+from tests.api.conftest import bearer
 from tests.db.factories import make_user
 
 N = 10
@@ -33,7 +34,7 @@ def live(db_engine):
         user_id = make_user(session).id
         session.commit()
     app.dependency_overrides[get_db] = get
-    yield TestClient(app), {"X-User-Id": str(user_id)}, Session
+    yield TestClient(app), bearer(user_id), Session
     app.dependency_overrides.clear()
     with Session() as session:
         session.execute(delete(User).where(User.id == user_id))
