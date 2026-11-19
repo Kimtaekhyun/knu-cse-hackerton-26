@@ -10,6 +10,15 @@
       "Base",
     ],
   },
+  "packages": [
+    {
+      "kind": "remote",
+      "repository": "https://github.com/kakao/kakao-ios-sdk",
+      "version": {
+        "up-to-next-major-version": "2.30.0",
+      },
+    },
+  ],
   "files": [
     { "kind": "folder", "path": "Pansoham", "target-membership": [ "Pansoham" ] },
     { "kind": "folder", "path": "Config" },
@@ -31,6 +40,21 @@
         "compile-sources",
         "frameworks",
         "resources",
+      ],
+      "package-product-members": [
+        {
+          "package": "kakao-ios-sdk",
+          "product-name": "KakaoSDKAuth",
+          "build-phase": { "build-phase": "frameworks" },
+        }, {
+          "package": "kakao-ios-sdk",
+          "product-name": "KakaoSDKCommon",
+          "build-phase": { "build-phase": "frameworks" },
+        }, {
+          "package": "kakao-ios-sdk",
+          "product-name": "KakaoSDKUser",
+          "build-phase": { "build-phase": "frameworks" },
+        },
       ],
       "build-settings": {
         "CODE_SIGN_STYLE": "Automatic",

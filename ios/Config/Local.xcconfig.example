@@ -9,3 +9,7 @@ PRODUCT_BUNDLE_IDENTIFIER = com.myname.pansoham
 // Wi-Fi IP는 `ipconfig getifaddr en0`, Mac 이름은 시스템 설정 › 일반 › 공유 › 로컬 호스트 이름
 // 시뮬레이터만 쓰면 이 줄을 지운다 (localhost 사용)
 API_BASE_URL = http:/$()/my-macbook.local:8000
+
+// 카카오 로그인용 네이티브 앱 키 (카카오 개발자 콘솔 › [앱] › [플랫폼 키] › [네이티브 앱 키])
+// 키 하나에 번들 ID를 하나만 등록할 수 있어서, 위 PRODUCT_BUNDLE_IDENTIFIER를 등록한 내 키를 적는다
+KAKAO_NATIVE_APP_KEY = 네이티브_앱_키

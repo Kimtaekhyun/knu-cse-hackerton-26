@@ -8,4 +8,7 @@ PRODUCT_BUNDLE_IDENTIFIER = com.knu.pansoham
 // xcconfig에서 //는 주석이라 URL이 잘리므로 빈 변수 $()를 끼워 넣는다.
 API_BASE_URL = http:/$()/localhost:8000
 
+// 카카오 네이티브 앱 키. 사람마다 번들 ID가 달라서 키도 각자 Local.xcconfig에 적는다 (비어 있으면 카카오 로그인만 꺼짐)
+KAKAO_NATIVE_APP_KEY =
+
 #include? "Local.xcconfig"

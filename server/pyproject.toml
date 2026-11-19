@@ -15,6 +15,7 @@ dependencies = [
     "sqlalchemy",
     "psycopg[binary]",
     "alembic",
+    "pyjwt>=2.15.1",
 ]
 
 [dependency-groups]

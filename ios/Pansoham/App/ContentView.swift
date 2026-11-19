@@ -3,6 +3,7 @@ import SwiftUI
 /// 지금 보여 줄 화면을 고르는 곳.
 struct ContentView: View {
     @State private var router = Router()
+    private var auth = AuthSession.shared
 
     var body: some View {
         ZStack {
@@ -15,6 +16,14 @@ struct ContentView: View {
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { router.bounds = $0 }
         .environment(router)
             .preferredColorScheme(.light)
+        // 저장된 토큰이 아직 유효한지 확인 (무효면 아래 onChange 가 로그인 화면으로 보내요)
+        .task { await auth.refresh() }
+        // 로그아웃되거나 토큰이 만료되면 로그인 화면으로
+        .onChange(of: auth.isLoggedIn) { _, loggedIn in
+            if !loggedIn, ![.login, .onboarding].contains(router.current) {
+                router.reset(to: .login, direction: .fade)
+            }
+        }
     }
 
     @ViewBuilder
