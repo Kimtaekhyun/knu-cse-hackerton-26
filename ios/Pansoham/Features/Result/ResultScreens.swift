@@ -311,14 +311,17 @@ struct ResultScreen: View {
 // MARK: - 원본 사진 크게 보기
 
 /// 결과 화면의 `원본 보기`. 찍은 판서 사진 전체를 검은 바탕에 크게 보여 줘요.
+/// `image` 를 넘기면 그 사진을 보여 줘요 (시간표 확인의 원본 등).
 struct OriginalPhotoView: View {
+    var image: UIImage?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Color.black.ignoresSafeArea()
-            Image("board-photo")
-                .resizable()
+            Group {
+                if let image { Image(uiImage: image).resizable() } else { Image("board-photo").resizable() }
+            }
                 .scaledToFit()
                 .padding(24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

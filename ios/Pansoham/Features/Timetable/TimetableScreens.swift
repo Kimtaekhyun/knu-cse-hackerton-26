@@ -130,8 +130,12 @@ struct TimetableConfirmScreen: View {
     @State private var showEditor = false
     @State private var draftName = ""
     @State private var draftTime = ""
+    /// 원본 사진 크게 보기
+    @State private var showOriginal = false
 
     private let days = ["월", "화", "수", "목", "금"]
+    /// 에브리타임 '이미지로 저장' 비율 (가로 / 세로)
+    private let photoRatio: CGFloat = 1158 / 1275
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
@@ -142,6 +146,7 @@ struct TimetableConfirmScreen: View {
                 Button("취소", role: .cancel) {}
                 Button(editingID == nil ? "추가" : "저장") { saveDraft() }
             }
+            .fullScreenCover(isPresented: $showOriginal) { OriginalPhotoView(image: router.timetableImage) }
     }
 
     private var wide: some View {
@@ -154,86 +159,13 @@ struct TimetableConfirmScreen: View {
             }
             .at(48, 104)
 
-            // 원본 캡처
-            ZStack(alignment: .topLeading) {
-                Color.dsPanel
-                ForEach(Array(days.enumerated()), id: \.offset) { index, day in
-                    Text(day).ds(12, .medium, .dsSub).at(44 + CGFloat(index) * 50, 16)
-                }
-                block(x: 36, y: 98, opacity: 1)
-                block(x: 86, y: 202, opacity: 0.85)
-                block(x: 136, y: 46, opacity: 1)
-                block(x: 186, y: 306, opacity: 0.85)
-                block(x: 236, y: 98, opacity: 1)
-                // 05 에서 고른 캡처가 있으면 그걸 보여 줘요.
-                if let image = router.timetableImage {
-                    Color.dsPanel
-                    Image(uiImage: image).resizable().scaledToFit()
-                        .frame(width: 300, height: 452)
-                }
-            }
-            .frame(width: 300, height: 452, alignment: .topLeading)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .at(48, 210)
+            // 원본: 에브리타임 '이미지로 저장' 비율(1158 × 1275)에 맞춘 박스
+            photoBox(height: 452).at(48, 210)
 
             // 시간표 목록. 과목이 많으면 아래 막대(y 730) 위까지만 보이고 스크롤돼요.
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    if load == .loaded {
-                        if subjects.isEmpty {
-                            Text("과목을 찾지 못했어요. 과목 추가로 직접 넣어 주세요.").ds(15, .regular, .dsSub).padding(.vertical, 14)
-                        }
-                        ForEach(subjects) { subject in
-                            HStack(spacing: 14) {
-                                Button { edit(subject) } label: {
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(subject.name).ds(17, .bold)
-                                            Text(subject.time).ds(15, .regular, .dsSub)
-                                        }
-                                        Spacer(minLength: 0)
-                                    }
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        subjects.removeAll { $0.id == subject.id }
-                                    }
-                                } label: {
-                                    Image("minus-circle-28")
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            .padding(.vertical, 14)
-                            .frame(width: 766)
-                            .overlay(alignment: .bottom) {
-                                Rectangle().fill(Color.dsLine).frame(height: 1)
-                            }
-                        }
-
-                        Button {
-                            edit(nil)
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image("plus-20")
-                                Text("과목 추가").ds(17, .bold)
-                            }
-                            .padding(.vertical, 20)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-
-                        Text("시간이 정해지지 않은 과목(사이버강의 등)은 미분류함에서 직접 옮겨요.")
-                            .ds(14, .regular, .dsSub)
-                    } else {
-                        statusView(width: 766)
-                    }
-                }
-                .padding(.bottom, 24)
-            }
-            .frame(width: 766, height: 730 - 210, alignment: .topLeading)
-            .at(380, 210)
+            ScrollView { subjectList(width: 655) }
+                .frame(width: 655, height: 730 - 210, alignment: .topLeading)
+                .at(491, 210)
 
             BottomBar(caption: caption) {
                 PrimaryButton(title: "이대로 저장", width: 280, enabled: load == .loaded) {
@@ -243,11 +175,110 @@ struct TimetableConfirmScreen: View {
         }
     }
 
-    private func block(x: CGFloat, y: CGFloat, opacity: Double) -> some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Color.black.opacity(opacity))
-            .frame(width: 44, height: 66)
-            .at(x, y)
+    /// 원본 시간표 사진. 에브리타임 '이미지로 저장' 은 주말 수업 유무와 관계없이 1158 × 1275 라
+    /// 박스를 그 비율로 두고 사진을 비율 그대로 맞춰요. 누르면 크게 보여 줘요.
+    func photoBox(height: CGFloat) -> some View {
+        let width = (height * photoRatio).rounded()
+        return ZStack(alignment: .bottomTrailing) {
+            Color.dsPanel
+            if let image = router.timetableImage {
+                Image(uiImage: image).resizable().scaledToFit()
+                    .frame(width: width, height: height)
+                Text("탭해서 크게 보기").ds(12, .bold, .white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color.black.opacity(0.72), in: Capsule())
+                    .padding(12)
+            } else {
+                // 사진 없이 열었을 때(개발용 `-startScreen timetableConfirm`)는 빈 표만
+                sampleGrid
+            }
+        }
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color.black.opacity(0.1), lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture { if router.timetableImage != nil { showOriginal = true } }
+    }
+
+    /// 사진이 없을 때 자리 표시 (월~금 · 9~5시 빈 표)
+    private var sampleGrid: some View {
+        GeometryReader { geo in
+            let head: CGFloat = 22, side: CGFloat = 22
+            let col = (geo.size.width - side) / 5, row = (geo.size.height - head) / 9
+            ZStack(alignment: .topLeading) {
+                Color.white
+                ForEach(0..<5, id: \.self) { index in
+                    Text(days[index]).ds(10, .medium, .dsSub)
+                        .frame(width: col).at(side + col * CGFloat(index), 5)
+                    Rectangle().fill(Color.dsLine).frame(width: 1, height: geo.size.height)
+                        .at(side + col * CGFloat(index), 0)
+                }
+                ForEach(0..<9, id: \.self) { hour in
+                    Rectangle().fill(Color.dsLine).frame(width: geo.size.width, height: 1)
+                        .at(0, head + row * CGFloat(hour))
+                    Text("\((8 + hour) % 12 + 1)").ds(10, .medium, .dsSub)
+                        .at(5, head + row * CGFloat(hour) + 2)
+                }
+            }
+        }
+    }
+
+    /// 과목 목록 · 과목 추가 (불러오는 중 · 실패면 그 상태)
+    func subjectList(width: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if load == .loaded {
+                if subjects.isEmpty {
+                    Text("과목을 찾지 못했어요. 과목 추가로 직접 넣어 주세요.").ds(15, .regular, .dsSub).padding(.vertical, 14)
+                }
+                ForEach(subjects) { subject in
+                    HStack(spacing: 14) {
+                        Button { edit(subject) } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(subject.name).ds(17, .bold)
+                                    Text(subject.time).ds(15, .regular, .dsSub)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                subjects.removeAll { $0.id == subject.id }
+                            }
+                        } label: {
+                            Image("minus-circle-28")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.vertical, 14)
+                    .frame(width: width)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(Color.dsLine).frame(height: 1)
+                    }
+                }
+
+                Button {
+                    edit(nil)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image("plus-20")
+                        Text("과목 추가").ds(17, .bold)
+                    }
+                    .padding(.vertical, 20)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Text("시간이 정해지지 않은 과목(사이버강의 등)은 미분류함에서 직접 옮겨요.")
+                    .ds(14, .regular, .dsSub)
+            } else {
+                statusView(width: width)
+            }
+        }
+        .padding(.bottom, 24)
     }
 
     enum LoadState: Equatable {
@@ -337,28 +368,12 @@ extension TimetableUploadScreen {
     private var portrait: some View {
         PortraitCanvas {
             ZStack(alignment: .topLeading) {
-                // 위 막대
-                ZStack {
-                    Text("시간표 등록").ds(17, .bold)
-                    HStack {
-                        Button { router.pop() } label: {
-                            HStack(spacing: 2) {
-                                Image("chevron-back-24")
-                                Text("뒤로").ds(17, .medium)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        Spacer()
-                        Button { router.reset(to: .homeFirst) } label: {
-                            Text("나중에 할게요").ds(17, .medium, .dsSub)
-                        }
-                        .buttonStyle(.plain)
+                PortraitNavBar(backTitle: "뒤로", title: "시간표 등록", onBack: { router.pop() }) {
+                    Button { router.reset(to: .homeFirst) } label: {
+                        Text("나중에 할게요").ds(17, .medium, .dsSub)
                     }
-                    .padding(.leading, 36)
-                    .padding(.trailing, 48)
+                    .buttonStyle(.plain)
                 }
-                .frame(width: portraitWidth, height: 56)
                 .at(0, 24)
 
                 // 안내
@@ -379,17 +394,11 @@ extension TimetableUploadScreen {
                     .ds(14, .regular, .dsSub)
                     .at(48, 1037)
 
-                // 아래 막대
-                HStack {
-                    Text(picked ? "이미지 1장 선택됨" : "선택된 이미지 없음").ds(17, .medium, .dsSub)
-                    Spacer()
+                PortraitBottomBar(caption: picked ? "이미지 1장 선택됨" : "선택된 이미지 없음") {
                     PrimaryButton(title: "다음", width: 280, enabled: picked) {
                         router.push(.timetableConfirm)
                     }
                 }
-                .padding(.horizontal, 48)
-                .frame(width: portraitWidth, height: 104)
-                .overlay(alignment: .top) { Rectangle().fill(Color.dsLine).frame(height: 1) }
                 .at(0, 1090)
             }
             .frame(width: portraitWidth, height: portraitHeight, alignment: .topLeading)
@@ -454,34 +463,57 @@ extension TimetableUploadScreen {
 }
 
 extension TimetableConfirmScreen {
+    /// 아이패드 세로처럼 넓은 세로 창은 피그마 세로 디자인, 스플릿 뷰처럼 좁은 창은 한 줄 배치.
+    @ViewBuilder
     func narrow(_ size: CGSize) -> some View {
+        if size.width >= 700 { portrait } else { compact(size) }
+    }
+
+    /// 세로 화면 — 피그마 "06-2 시간표 확인 · 원본 사진 맞춤 · 세로" (834 × 1194)
+    /// 사진 판은 위에 가로로 꽉, 과목 목록은 아래 (많으면 스크롤).
+    private var portrait: some View {
+        PortraitCanvas {
+            ZStack(alignment: .topLeading) {
+                PortraitNavBar(backTitle: "다시 올리기", title: "시간표 확인", onBack: { router.backToUpload() })
+                    .at(0, 24)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("인식된 시간표를 확인해 주세요").ds(34, .bold)
+                    Text("잘못 읽힌 과목은 눌러서 고칠 수 있어요.").ds(17, .regular, .dsSub)
+                }
+                .at(48, 104)
+
+                photoBox(height: 372)
+                    .frame(width: 738, height: 404)
+                    .background(Color.dsPanel, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .at(48, 204)
+
+                ScrollView { subjectList(width: 738) }
+                    .frame(width: 738, height: 1090 - 632, alignment: .topLeading)
+                    .at(48, 632)
+
+                PortraitBottomBar(caption: caption) {
+                    PrimaryButton(title: "이대로 저장", width: 280, enabled: load == .loaded) {
+                        router.reset(to: .homeFirst)
+                    }
+                }
+                .at(0, 1090)
+            }
+            .frame(width: portraitWidth, height: portraitHeight, alignment: .topLeading)
+        }
+    }
+
+    /// 스플릿 뷰처럼 좁은 창
+    private func compact(_ size: CGSize) -> some View {
         let inner = size.width - 40
         return NarrowPage(backTitle: "다시 올리기", barTitle: "시간표 확인", onBack: { router.backToUpload() },
                           title: "인식된 시간표를 확인해 주세요",
                           detail: "잘못 읽힌 과목은 눌러서 고칠 수 있어요.",
                           trailing: { EmptyView() }, content: {
-            // 원본 캡처 (작게)
-            ZStack(alignment: .topLeading) {
-                Color.dsPanel
-                ForEach(Array(days.enumerated()), id: \.offset) { index, day in
-                    Text(day).ds(12, .medium, .dsSub).at(44 + CGFloat(index) * 50, 16)
-                }
-                block(x: 36, y: 98, opacity: 1)
-                block(x: 86, y: 202, opacity: 0.85)
-                block(x: 136, y: 46, opacity: 1)
-                block(x: 186, y: 306, opacity: 0.85)
-                block(x: 236, y: 98, opacity: 1)
-                // 05 에서 고른 캡처가 있으면 그걸 보여 줘요.
-                if let image = router.timetableImage {
-                    Color.dsPanel
-                    Image(uiImage: image).resizable().scaledToFit()
-                        .frame(width: 300, height: 452)
-                }
-            }
-            .frame(width: 300, height: 452, alignment: .topLeading)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .scaledBox(300, 452, to: 150)
-            .frame(maxWidth: .infinity)
+            // 원본 (작게)
+            photoBox(height: 452)
+                .scaledBox((452 * photoRatio).rounded(), 452, to: min(inner, 300))
+                .frame(maxWidth: .infinity)
 
             VStack(alignment: .leading, spacing: 0) {
                 if load == .loaded {
