@@ -2,7 +2,9 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import timetable
+from app.api.v1 import semesters, subjects, timetable
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(timetable.router)
+api_router.include_router(semesters.router)
+api_router.include_router(subjects.router)

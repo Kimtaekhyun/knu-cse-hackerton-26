@@ -163,3 +163,16 @@ def test_orm_delete_semester_removes_subjects(db):
     db.delete(semester)
     db.flush()
     assert count(db, Subject, semester_id=semester_id) == 0
+
+
+def test_duplicate_subject_name_rejected(db):
+    semester = make_semester(db, make_user(db))
+    make_subject(db, semester, name="자료구조")
+    with pytest.raises(IntegrityError):
+        make_subject(db, semester, name="자료구조")
+
+
+def test_same_subject_name_allowed_in_other_semester(db):
+    user = make_user(db)
+    make_subject(db, make_semester(db, user, year=2026), name="자료구조")
+    make_subject(db, make_semester(db, user, year=2025, is_current=False), name="자료구조")
