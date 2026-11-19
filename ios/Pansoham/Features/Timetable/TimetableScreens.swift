@@ -16,11 +16,11 @@ struct TimetableUploadScreen: View {
     private var picked: Bool { router.timetableImage != nil }
     private func pick(_ image: UIImage) { router.timetableImage = image }
 
-    private let steps = [
-        "에브리타임 앱에서 시간표 탭 열기",
-        "시간표 전체가 보이게 화면 캡처",
-        "오른쪽에서 캡처 이미지 고르기",
-    ]
+    private func steps(below: Bool = false) -> [String] {
+        ["에브리타임 앱에서 시간표 탭 열기",
+         "시간표 전체가 보이게 화면 캡처",
+         below ? "아래에서 캡처 이미지 고르기" : "오른쪽에서 캡처 이미지 고르기"]
+    }
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
@@ -44,17 +44,7 @@ struct TimetableUploadScreen: View {
                     .ds(17, .regular, .dsSub, line: 1.55)
                 Color.clear.frame(width: 1, height: 36)
 
-                VStack(alignment: .leading, spacing: 18) {
-                    ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-                        HStack(spacing: 14) {
-                            Text("\(index + 1)").ds(14, .bold, .white)
-                                .frame(width: 28, height: 28)
-                                .background(Color.black)
-                                .clipShape(Circle())
-                            Text(step).ds(17, .medium)
-                        }
-                    }
-                }
+                stepList(below: false)
 
                 Color.clear.frame(width: 1, height: 40)
                 Text("에브리타임은 공식 연동이 없어서 캡처 이미지로 시간표를 읽어요.")
@@ -62,26 +52,8 @@ struct TimetableUploadScreen: View {
             }
             .at(48, 112)
 
-            // 업로드 영역
-            VStack(spacing: 0) {
-                pickedPreview(empty: 72, maxSize: CGSize(width: 360, height: 260))
-                Color.clear.frame(width: 1, height: 24)
-                Text(picked ? "시간표 캡처 1장을 골랐어요" : "시간표 캡처를 여기에 끌어다 놓으세요").ds(20, .bold)
-                Color.clear.frame(width: 1, height: 8)
-                Text("PNG, JPG · 한 장").ds(15, .regular, .dsSub)
-                Color.clear.frame(width: 1, height: 28)
-                SecondaryButton(title: picked ? "다른 이미지 선택" : "사진 앨범에서 선택") { showPicker = true }
-            }
-            .frame(width: 527, height: 586)
-            .background(dropTargeted ? Color.dsBlueSoft : Color.dsPanel)
-            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 32, style: .continuous)
-                    .stroke(dropTargeted ? Color.dsBlue : Color.black.opacity(0.14), style: StrokeStyle(lineWidth: 1.5, dash: [6, 6]))
-            )
-            .contentShape(Rectangle())
-            .imageDrop(isTargeted: $dropTargeted, onDrop: pick)
-            .at(619, 112)
+            dropZone(width: 527, height: 586, preview: CGSize(width: 360, height: 260))
+                .at(619, 112)
 
             BottomBar(caption: picked ? "이미지 1장 선택됨" : "선택된 이미지 없음") {
                 PrimaryButton(title: "다음", width: 280, enabled: picked) {
@@ -89,6 +61,43 @@ struct TimetableUploadScreen: View {
                 }
             }
         }
+    }
+
+    /// 캡처 방법 1 · 2 · 3. 세로 화면은 업로드 영역이 아래라 `below`.
+    private func stepList(below: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            ForEach(Array(steps(below: below).enumerated()), id: \.offset) { index, step in
+                HStack(spacing: 14) {
+                    Text("\(index + 1)").ds(14, .bold, .white)
+                        .frame(width: 28, height: 28)
+                        .background(Color.black)
+                        .clipShape(Circle())
+                    Text(step).ds(17, .medium)
+                }
+            }
+        }
+    }
+
+    /// 업로드 영역 (끌어다 놓기 · 사진 앨범에서 선택)
+    private func dropZone(width: CGFloat, height: CGFloat, preview: CGSize) -> some View {
+        VStack(spacing: 0) {
+            pickedPreview(empty: 72, maxSize: preview)
+            Color.clear.frame(width: 1, height: 24)
+            Text(picked ? "시간표 캡처 1장을 골랐어요" : "시간표 캡처를 여기에 끌어다 놓으세요").ds(20, .bold)
+            Color.clear.frame(width: 1, height: 8)
+            Text("PNG, JPG · 한 장").ds(15, .regular, .dsSub)
+            Color.clear.frame(width: 1, height: 28)
+            SecondaryButton(title: picked ? "다른 이미지 선택" : "사진 앨범에서 선택") { showPicker = true }
+        }
+        .frame(width: width, height: height)
+        .background(dropTargeted ? Color.dsBlueSoft : Color.dsPanel)
+        .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .stroke(dropTargeted ? Color.dsBlue : Color.black.opacity(0.14), style: StrokeStyle(lineWidth: 1.5, dash: [6, 6]))
+        )
+        .contentShape(Rectangle())
+        .imageDrop(isTargeted: $dropTargeted, onDrop: pick)
     }
 
     /// 고른 캡처 미리보기. 아직 없으면 + 동그라미.
@@ -317,7 +326,78 @@ struct TimetableConfirmScreen: View {
 // MARK: - 좁은 화면 (스플릿 뷰)
 
 extension TimetableUploadScreen {
+    /// 아이패드 세로처럼 넓은 세로 창은 피그마 세로 디자인, 스플릿 뷰처럼 좁은 창은 한 줄 배치.
+    @ViewBuilder
     func narrow(_ size: CGSize) -> some View {
+        if size.width >= 700 { portrait } else { compact(size) }
+    }
+
+    /// 세로 화면 — 피그마 "05 시간표 업로드 · 세로" (834 × 1194)
+    /// 안내는 위, 업로드 영역은 남는 높이를 채워 화면 가운데를 차지해요.
+    private var portrait: some View {
+        PortraitCanvas {
+            ZStack(alignment: .topLeading) {
+                // 위 막대
+                ZStack {
+                    Text("시간표 등록").ds(17, .bold)
+                    HStack {
+                        Button { router.pop() } label: {
+                            HStack(spacing: 2) {
+                                Image("chevron-back-24")
+                                Text("뒤로").ds(17, .medium)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Spacer()
+                        Button { router.reset(to: .homeFirst) } label: {
+                            Text("나중에 할게요").ds(17, .medium, .dsSub)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.leading, 36)
+                    .padding(.trailing, 48)
+                }
+                .frame(width: portraitWidth, height: 56)
+                .at(0, 24)
+
+                // 안내
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("에브리타임 시간표를\n올려 주세요").ds(34, .bold, line: 1.35)
+                    Color.clear.frame(width: 1, height: 14)
+                    Text("시간표가 있으면 수업 시간에 찍은 판서가\n그 과목 폴더로 자동 정리돼요.")
+                        .ds(17, .regular, .dsSub, line: 1.55)
+                    Color.clear.frame(width: 1, height: 36)
+                    stepList(below: true)
+                }
+                .at(48, 112)
+
+                dropZone(width: 738, height: 555, preview: CGSize(width: 560, height: 300))
+                    .at(48, 462)
+
+                Text("에브리타임은 공식 연동이 없어서 캡처 이미지로 시간표를 읽어요.")
+                    .ds(14, .regular, .dsSub)
+                    .at(48, 1037)
+
+                // 아래 막대
+                HStack {
+                    Text(picked ? "이미지 1장 선택됨" : "선택된 이미지 없음").ds(17, .medium, .dsSub)
+                    Spacer()
+                    PrimaryButton(title: "다음", width: 280, enabled: picked) {
+                        router.push(.timetableConfirm)
+                    }
+                }
+                .padding(.horizontal, 48)
+                .frame(width: portraitWidth, height: 104)
+                .overlay(alignment: .top) { Rectangle().fill(Color.dsLine).frame(height: 1) }
+                .at(0, 1090)
+            }
+            .frame(width: portraitWidth, height: portraitHeight, alignment: .topLeading)
+        }
+    }
+
+    /// 스플릿 뷰처럼 좁은 창
+    private func compact(_ size: CGSize) -> some View {
         let inner = size.width - 40
         return NarrowPage(backTitle: "뒤로", barTitle: "시간표 등록", onBack: { router.pop() },
                           title: "에브리타임 시간표를 올려 주세요",
@@ -327,7 +407,7 @@ extension TimetableUploadScreen {
                 .buttonStyle(.plain)
         }, content: {
             VStack(alignment: .leading, spacing: 14) {
-                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                ForEach(Array(steps().enumerated()), id: \.offset) { index, step in
                     HStack(spacing: 12) {
                         Text("\(index + 1)").ds(13, .bold, .white)
                             .frame(width: 26, height: 26)
