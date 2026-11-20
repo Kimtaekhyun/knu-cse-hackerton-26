@@ -3,7 +3,7 @@
 gemini.py의 ask_json처럼 이미지와 프롬프트를 보내고 pydantic 스키마 형식의 JSON 답을 받는다.
 - 답 형식은 structured outputs(output_format)로 강제해서, 깨진 JSON을 다시 요청할 일이 없다
 - 일시 오류(429 · 5xx · 연결 끊김)는 SDK가 알아서 다시 시도한다 (MAX_RETRIES)
-- 안전 거절이 나면 서버가 다른 모델로 한 번 더 시도한다 (server-side fallback, fallbacks="default")
+- 안전 거절이 나면 서버가 다른 모델로 한 번 더 시도한다 (server-side fallback, Haiku는 지원 안 함)
 """
 
 import base64
@@ -28,6 +28,7 @@ MAX_TOKENS = 16000
 # 생각을 얼마나 깊게 할지 (low · medium · high · xhigh · max). 정확도와 시간 · 비용을 맞바꾼다
 EFFORT = "medium"
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+FALLBACK_OPTIONS = {"betas": [FALLBACK_BETA], "fallbacks": "default"}
 
 _client = None
 
@@ -85,6 +86,8 @@ def ask_image_json(
         },
         {"type": "text", "text": prompt},
     ]
+    # Haiku는 서버 측 fallback이 없다 (보내면 거절이 그대로이거나 400). 다른 모델에만 붙인다
+    fallback = {} if model.startswith("claude-haiku") else FALLBACK_OPTIONS
     start = time.time()
     try:
         response = get_client().beta.messages.parse(
@@ -93,8 +96,7 @@ def ask_image_json(
             messages=[{"role": "user", "content": content}],
             output_format=schema,
             output_config={"effort": EFFORT},
-            betas=[FALLBACK_BETA],
-            fallbacks="default",
+            **fallback,
         )
     except anthropic.AuthenticationError as error:
         raise ClaudeError("ANTHROPIC_API_KEY가 올바르지 않아요.") from error

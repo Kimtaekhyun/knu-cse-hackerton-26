@@ -15,9 +15,10 @@ class Settings(BaseSettings):
 
     # 이미지 인식에 쓸 AI. gemini 또는 claude (services/llm.py가 이 값을 보고 보낸다)
     llm_provider: Literal["gemini", "claude"] = "gemini"
+    # 실제 키는 .env의 ANTHROPIC_API_KEY에서 읽는다. ""는 .env에 없을 때 쓰는 값이다
     anthropic_api_key: str = ""
     # Claude로 시간표를 읽을 때 쓰는 모델
-    claude_timetable_model: str = "claude-opus-5-5"
+    claude_timetable_model: str = "claude-haiku-5-5"
     gemini_api_key: str = ""
     # 판서 추출에 쓰는 기본 모델
     gemini_model: str = "gemini-3.5-flash-lite"

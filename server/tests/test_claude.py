@@ -132,3 +132,10 @@ def test_prepare_image_shrinks_large_image(monkeypatch):
 def test_prepare_image_rejects_unreadable():
     with pytest.raises(ClaudeError, match="읽을 수 없어요"):
         prepare_image(b"not-an-image", "image/heic")
+
+
+def test_haiku_is_sent_without_fallback(fake):
+    ask_image_json(b"img", "image/png", "p", Dummy, model="claude-haiku-5-5")
+    call = fake["calls"][0]
+    assert "fallbacks" not in call
+    assert "betas" not in call
