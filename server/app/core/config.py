@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     # Claude로 시간표를 읽을 때 쓰는 모델
     claude_timetable_model: str = "claude-haiku-5-5"
+    # Claude로 판서를 읽을 때 쓰는 모델
+    claude_note_model: str = "claude-haiku-5-5"
     gemini_api_key: str = ""
     # 판서 추출에 쓰는 기본 모델
     gemini_model: str = "gemini-3.5-flash-lite"
@@ -36,6 +38,8 @@ class Settings(BaseSettings):
     # 업로드한 판서 사진 · 카드 조각을 저장하는 폴더 (app/storage/local.py)
     # 로컬에서 uv로 실행할 때 기본값. docker compose 안에서는 MEDIA_DIR로 media 볼륨을 가리킨다
     media_dir: Path = ROOT / "server" / "media"
+    # 판서를 동시에 몇 장까지 처리할지. 1이면 올린 순서대로 한 장씩 (AI 분당 한도 · 화면 순서)
+    pipeline_workers: int = 1
 
 
 @lru_cache

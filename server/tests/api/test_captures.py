@@ -339,3 +339,94 @@ def test_storage_rejects_keys_outside_media_dir():
         storage.path("../secret")
     with pytest.raises(ValueError):
         storage.path("")
+
+
+# ---------- 처리 줄 ----------
+
+
+def test_upload_enqueues_once_even_when_resent(client, auth, semester, enqueued):
+    """처음 받은 사진만 처리 줄에 선다. 다시 보낸 사진은 이미 줄에 있다"""
+    capture_id = str(uuid.uuid4())
+    upload(client, auth, {"id": capture_id})
+    upload(client, auth, {"id": capture_id})
+    assert enqueued == [(capture_id, False)]
+
+
+def test_rejected_upload_is_not_enqueued(client, auth, semester, enqueued):
+    upload(client, auth, image=b"", content_type="image/jpeg")
+    assert enqueued == []
+
+
+# ---------- 다시 처리 ----------
+
+
+def test_retry_failed_capture(client, auth, db, user, semester, enqueued):
+    capture = make_capture(db, user, semester, status=CaptureStatus.failed, fail_reason="rectify")
+    response = client.post(f"{URL}/{capture.id}/retry", headers=auth, json={"skip_rectify": True})
+    assert response.status_code == 202
+    body = response.json()
+    assert (body["status"], body["fail_reason"]) == ("uploaded", None)
+    assert enqueued == [(str(capture.id), True)]
+
+
+def test_retry_without_body_does_not_skip_rectify(client, auth, db, user, semester, enqueued):
+    capture = make_capture(db, user, semester, status=CaptureStatus.failed, fail_reason="segment")
+    assert client.post(f"{URL}/{capture.id}/retry", headers=auth).status_code == 202
+    assert enqueued == [(str(capture.id), False)]
+
+
+@pytest.mark.parametrize("status", [CaptureStatus.done, CaptureStatus.segmenting])
+def test_retry_only_failed_capture(client, auth, db, user, semester, enqueued, status):
+    capture = make_capture(db, user, semester, status=status)
+    response = client.post(f"{URL}/{capture.id}/retry", headers=auth)
+    assert response.status_code == 409
+    assert enqueued == []
+
+
+def test_retry_others_capture_is_404(client, auth, db):
+    stranger = make_user(db)
+    theirs = make_capture(db, stranger, make_semester(db, stranger), status=CaptureStatus.failed)
+    assert client.post(f"{URL}/{theirs.id}/retry", headers=auth).status_code == 404
+
+
+# ---------- 저장 위치 미리보기 ----------
+
+
+def destination(client, auth, at):
+    response = client.get(f"{URL}/destination", headers=auth, params={"at": at.isoformat()})
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_destination_during_class(client, auth, subject):
+    assert destination(client, auth, IN_CLASS) == {
+        "semester_id": str(subject.semester_id),
+        "subject_id": str(subject.id),
+        "subject_name": "자료구조",
+    }
+
+
+def test_destination_outside_class_is_unsorted(client, auth, semester, subject):
+    body = destination(client, auth, IN_CLASS.replace(hour=20))
+    assert body == {"semester_id": str(semester.id), "subject_id": None, "subject_name": None}
+
+
+def test_destination_without_semester_does_not_create_one(client, auth, db):
+    body = destination(client, auth, IN_CLASS)
+    assert body == {"semester_id": None, "subject_id": None, "subject_name": None}
+    assert db.scalar(select(func.count()).select_from(Semester)) == 0
+
+
+def test_destination_matches_upload(client, auth, subject):
+    """미리 보여 준 곳과 실제로 저장되는 곳이 같다"""
+    for at in (IN_CLASS, IN_CLASS.replace(hour=20)):
+        preview = destination(client, auth, at)
+        saved = upload(client, auth, {"taken_at": at.isoformat()}).json()
+        assert saved["subject_id"] == preview["subject_id"]
+        assert saved["semester_id"] == preview["semester_id"]
+
+
+def test_destination_without_at_uses_now(client, auth, semester):
+    response = client.get(f"{URL}/destination", headers=auth)
+    assert response.status_code == 200
+    assert response.json()["semester_id"] == str(semester.id)

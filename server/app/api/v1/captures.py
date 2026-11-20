@@ -1,7 +1,7 @@
-"""판서(캡처) API: 올리기 · 목록 · 상세 · 과목으로 옮기기 · 삭제 · 사진.
+"""판서(캡처) API: 올리기 · 목록 · 상세 · 과목으로 옮기기 · 삭제 · 사진 · 다시 처리 · 저장 위치.
 
-처리(판서 펴기 → 글씨 찾기 → 정리)는 서버가 뒤에서 한다. 앱은 올린 뒤
-GET /captures/{id}를 주기적으로 불러 status가 done · failed가 될 때까지 기다린다.
+처리(판서 펴기 → 글씨 찾기 → 정리)는 서버가 뒤에서 한다 (app/services/pipeline/worker.py).
+앱은 올린 뒤 GET /captures/{id}를 주기적으로 불러 status가 done · failed가 될 때까지 기다린다.
 """
 
 import uuid
@@ -12,8 +12,9 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Response, Uploa
 from fastapi.responses import FileResponse
 
 from app.api.deps import DbDep, UserDep, WriteUserDep
-from app.schemas.capture import CaptureDetail, CaptureMove, CaptureOut
+from app.schemas.capture import CaptureDetail, CaptureMove, CaptureOut, CaptureRetry, Destination
 from app.services import captures as service
+from app.services.pipeline import worker
 from app.storage import local as storage
 
 router = APIRouter(prefix="/captures", tags=["captures"])
@@ -55,9 +56,10 @@ def upload(
         Form(description="저장할 과목. 없으면 찍은 시각의 수업으로 자동 분류한다"),
     ] = None,
 ):
-    """판서 사진을 받아 저장한다. 처음 받은 사진은 202, 이미 받은 id를 다시 보내면 200.
+    """판서 사진을 받아 저장하고 처리 줄에 세운다. 처음은 202, 이미 받은 id를 다시 보내면 200.
 
     사용자 잠금(WriteUserDep) 안에서 확인하므로 같은 id가 동시에 와도 하나만 저장된다.
+    처리 줄에는 DB 커밋이 끝난 뒤에 세운다 (워커가 아직 없는 판서를 찾지 않게).
     """
     if capture_id is not None and (resent := service.find_resent(db, user, capture_id)):
         response.status_code = 200
@@ -72,7 +74,18 @@ def upload(
         taken_at=taken_at or datetime.now(service.SEOUL),
         subject_id=subject_id,
     )
+    worker.enqueue(capture.id)
     return service.capture_detail(db, capture)
+
+
+@router.get("/destination", response_model=Destination)
+def get_destination(db: DbDep, user: UserDep, at: datetime | None = None):
+    """지금(at, 없으면 현재 시각) 찍으면 어느 과목에 저장되는지. 촬영 화면의 "○○ 폴더에 저장"
+
+    과목이 null이면 미분류함. 틀렸으면 앱이 과목을 골라 업로드에 subject_id로 보낸다.
+    /{capture_id}보다 먼저 선언해야 "destination"이 판서 id로 읽히지 않는다.
+    """
+    return service.destination(db, user, at or datetime.now(service.SEOUL))
 
 
 @router.get("", response_model=list[CaptureOut])
@@ -109,6 +122,17 @@ def move_capture(capture_id: uuid.UUID, body: CaptureMove, db: DbDep, user: Writ
     """과목으로 옮기기 (미분류함 → 과목, 과목 → 과목, 과목 → 미분류함)"""
     capture = service.get_capture(db, user, capture_id)
     service.move_capture(db, user, capture, body.subject_id)
+    return service.capture_detail(db, capture)
+
+
+@router.post("/{capture_id}/retry", response_model=CaptureDetail, status_code=202)
+def retry_capture(
+    capture_id: uuid.UUID, db: DbDep, user: WriteUserDep, body: CaptureRetry | None = None
+):
+    """처리에 실패한 판서를 다시 처리한다. skip_rectify면 화면을 못 찾아도 사진 그대로 쓴다"""
+    capture = service.get_capture(db, user, capture_id)
+    service.reset_for_retry(db, capture)
+    worker.enqueue(capture.id, skip_rectify=body is not None and body.skip_rectify)
     return service.capture_detail(db, capture)
 
 

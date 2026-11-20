@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.main import app
+from app.services.pipeline import worker
 from tests.db.factories import make_user
 
 SECRET = "test-secret-at-least-32-bytes-long-0123456789"
@@ -19,6 +20,22 @@ def jwt_settings(monkeypatch):
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def enqueued(monkeypatch):
+    """API 테스트에서는 판서를 실제로 처리하지 않고 처리 줄에 세운 기록만 남긴다
+
+    진짜 워커는 테스트 DB가 아닌 개발 DB를 보고, AI도 부르기 때문이다.
+    처리 자체는 tests/pipeline/에서 따로 확인한다.
+    """
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        worker,
+        "enqueue",
+        lambda capture_id, *, skip_rectify=False: calls.append((str(capture_id), skip_rectify)),
+    )
+    return calls
 
 
 def bearer(user_id) -> dict[str, str]:
