@@ -6,15 +6,17 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import sessionmaker
 
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.main import app
-from app.models import Semester, Subject, User
+from app.models import Capture, Semester, Subject, User
 from tests.api.conftest import bearer
 from tests.db.factories import make_user
 
@@ -101,3 +103,25 @@ def test_current_semester_switched_at_once(live):
     assert at_once(switch) == [200] * N
     with Session() as session:
         assert session.scalar(select(func.count()).where(Semester.is_current)) == 1
+
+
+def test_same_capture_resent_at_once(live, tmp_path, monkeypatch):
+    """답을 못 받은 앱이 같은 판서 id로 여러 번 다시 보내도 판서는 하나만 생긴다"""
+    client, auth, Session = live
+    monkeypatch.setenv("MEDIA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    client.post("/api/v1/semesters", json={"year": 2026, "term": "second"}, headers=auth)
+    capture_id = str(uuid4())
+
+    def send():
+        return client.post(
+            "/api/v1/captures",
+            headers=auth,
+            data={"id": capture_id},
+            files={"image": ("a.jpg", b"jpeg", "image/jpeg")},
+        )
+
+    codes = at_once(send)
+    assert sorted(codes) == [200] * (N - 1) + [202]
+    with Session() as session:
+        assert session.scalar(select(func.count()).where(Capture.id == capture_id)) == 1
