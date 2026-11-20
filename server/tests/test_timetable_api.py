@@ -36,7 +36,13 @@ def test_parse_returns_subjects(parsed):
 def test_rejects_non_image(parsed):
     response = upload(content_type="text/plain")
     assert response.status_code == 415
-    assert response.json()["detail"] == "이미지 파일(PNG, JPEG, WEBP, HEIC)만 올릴 수 있어요."
+    assert response.json()["detail"] == "이미지 파일(PNG, JPEG, WEBP)만 올릴 수 있어요."
+
+
+def test_rejects_heic(parsed):
+    # 앱은 JPEG로 바꿔 보내므로 HEIC는 앱 밖(/docs · curl)에서만 들어온다. 처리할 수 없으니 막는다
+    response = upload(content_type="image/heic")
+    assert response.status_code == 415
 
 
 def test_rejects_empty_file(parsed):

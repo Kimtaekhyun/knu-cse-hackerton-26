@@ -253,7 +253,7 @@ def grid_to_raw(grid: TimetableGrid, image: np.ndarray | None) -> RawTimetable:
 
 
 def decode_image(data: bytes) -> np.ndarray | None:
-    """이미지를 RGB 배열로. 열 수 없는 형식(HEIC 등)이면 None (색 보정 없이 진행)"""
+    """이미지를 RGB 배열로. 열 수 없는 형식이면 None (색 보정 없이 진행)"""
     try:
         with Image.open(io.BytesIO(data)) as opened:
             return np.asarray(ImageOps.exif_transpose(opened).convert("RGB"))

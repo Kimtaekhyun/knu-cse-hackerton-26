@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from app.core.config import get_settings
 from app.services.llm import LLMError, T
 
-# Claude가 읽는 이미지 형식. 나머지(HEIC 등)는 JPEG로 바꿔 보낸다
+# Claude가 읽는 이미지 형식. 나머지는 JPEG로 바꿔 보낸다
 SUPPORTED_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # API의 이미지 한 장 한도
 MAX_SIDE = 2000  # 크기를 줄여야 할 때 긴 변 길이. 좌표는 0~1000 비율이라 줄여도 결과가 같다

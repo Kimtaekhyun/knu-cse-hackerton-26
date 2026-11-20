@@ -117,7 +117,7 @@ def test_prepare_image_keeps_supported_small_image():
 
 
 def test_prepare_image_converts_unsupported_type_to_jpeg():
-    data, mime = prepare_image(png_bytes(), "image/heic")
+    data, mime = prepare_image(png_bytes(), "image/bmp")
     assert mime == "image/jpeg"
     assert Image.open(io.BytesIO(data)).format == "JPEG"
 
@@ -131,7 +131,7 @@ def test_prepare_image_shrinks_large_image(monkeypatch):
 
 def test_prepare_image_rejects_unreadable():
     with pytest.raises(ClaudeError, match="읽을 수 없어요"):
-        prepare_image(b"not-an-image", "image/heic")
+        prepare_image(b"not-an-image", "image/bmp")
 
 
 def test_haiku_is_sent_without_fallback(fake):
