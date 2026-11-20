@@ -23,7 +23,7 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      # GEMINI_API_KEY 등. 없어도 서버는 뜬다 (시간표 인식만 안 됨)
+      # GEMINI_API_KEY · ANTHROPIC_API_KEY 등. 없어도 서버는 뜬다 (시간표 인식만 안 됨)
       - path: .env
         required: false
     environment:
