@@ -1,14 +1,14 @@
 import io
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from PIL import Image
 from sqlalchemy import func, select
 
 from app.core.config import get_settings
-from app.models import Capture, CaptureStatus, Card, SemesterTerm
-from app.services.captures import SEOUL, capture_dir, rectified_key
+from app.models import Capture, CaptureStatus, Card, Semester, SemesterTerm
+from app.services.captures import SEOUL, capture_dir, rectified_key, term_of
 from app.storage import local as storage
 from tests.api.conftest import bearer
 from tests.db.factories import (
@@ -107,10 +107,48 @@ def test_upload_without_taken_at_uses_now(client, auth, semester):
     assert before - timedelta(seconds=1) <= taken_at <= datetime.now(UTC)
 
 
-def test_upload_without_current_semester_is_409(client, auth, db):
+def test_upload_without_semester_creates_current_semester(client, auth, db, user):
+    """시간표를 건너뛴 사용자: 오늘이 속한 학기를 만들고 판서는 미분류함에 넣는다"""
+    response = upload(client, auth, {"taken_at": IN_CLASS.isoformat()})
+    assert response.status_code == 202
+    body = response.json()
+    assert body["subject_id"] is None
+
+    semester = db.get(Semester, uuid.UUID(body["semester_id"]))
+    assert semester.user_id == user.id and semester.is_current
+    assert (semester.year, semester.term) == term_of(datetime.now(SEOUL).date())
+
+    # 다음 판서는 같은 학기를 쓴다 (학기를 또 만들지 않는다)
+    again = upload(client, auth).json()
+    assert again["semester_id"] == body["semester_id"]
+    assert db.scalar(select(func.count()).select_from(Semester)) == 1
+
+
+def test_upload_reuses_same_term_semester_when_none_is_current(client, auth, db, user):
+    """오늘 학기가 있는데 현재 학기 지정만 풀려 있으면 그 학기를 다시 현재로 쓴다"""
+    year, term = term_of(datetime.now(SEOUL).date())
+    existing = make_semester(db, user, year=year, term=term, is_current=False)
     response = upload(client, auth)
-    assert response.status_code == 409
-    assert count_captures(db) == 0
+    assert response.json()["semester_id"] == str(existing.id)
+    db.refresh(existing)
+    assert existing.is_current
+
+
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (date(2027, 1, 15), (2026, SemesterTerm.winter)),
+        (date(2027, 2, 28), (2026, SemesterTerm.winter)),
+        (date(2027, 3, 1), (2027, SemesterTerm.first)),
+        (date(2027, 6, 30), (2027, SemesterTerm.first)),
+        (date(2027, 7, 1), (2027, SemesterTerm.summer)),
+        (date(2027, 8, 31), (2027, SemesterTerm.summer)),
+        (date(2026, 9, 1), (2026, SemesterTerm.second)),
+        (date(2026, 12, 31), (2026, SemesterTerm.second)),
+    ],
+)
+def test_term_of(day, expected):
+    assert term_of(day) == expected
 
 
 def test_upload_to_others_subject_is_404(client, auth, db, semester):
