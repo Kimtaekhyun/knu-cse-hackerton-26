@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from app.schemas.timetable import Slot, Subject
-from app.services import timetable_ocr
+from app.services import llm
 from app.services.gemini import GeminiError
 from app.services.timetable_ocr import BlockBox, HourMark, TimetableGrid, parse_timetable
 
@@ -24,22 +24,27 @@ def grid(box):
 @pytest.fixture
 def settings(monkeypatch):
     monkeypatch.setattr(
-        timetable_ocr, "get_settings", lambda: SimpleNamespace(timetable_model="test-model")
+        llm,
+        "get_settings",
+        lambda: SimpleNamespace(llm_provider="gemini", timetable_model="test-model"),
     )
 
 
-def test_parse_timetable_uses_timetable_model(monkeypatch, settings):
+def test_parse_timetable_asks_with_timetable_task(monkeypatch, settings):
     seen = {}
 
-    def fake_ask_json(contents, schema, *, model, **kwargs):
-        seen["model"] = model
-        seen["contents"] = len(contents)
-        seen["schema"] = schema
+    def fake_ask(image, mime_type, prompt, schema, *, task):
+        seen.update(image=image, mime=mime_type, schema=schema, task=task)
         return grid([250, 100, 400, 900]), {}
 
-    monkeypatch.setattr(timetable_ocr, "ask_json", fake_ask_json)
+    monkeypatch.setattr(llm, "ask_image_json", fake_ask)
     result = parse_timetable(b"png-bytes", "image/png")
-    assert seen == {"model": "test-model", "contents": 2, "schema": TimetableGrid}
+    assert seen == {
+        "image": b"png-bytes",
+        "mime": "image/png",
+        "schema": TimetableGrid,
+        "task": "timetable",
+    }
     assert result == [Subject(name="자료구조", slots=[Slot(weekday=0, start="10:30", end="12:00")])]
 
 
@@ -47,7 +52,7 @@ def test_parse_timetable_passes_gemini_error(monkeypatch, settings):
     def fake_ask_json(*args, **kwargs):
         raise GeminiError("x")
 
-    monkeypatch.setattr(timetable_ocr, "ask_json", fake_ask_json)
+    monkeypatch.setattr(llm, "ask_image_json", fake_ask_json)
     with pytest.raises(GeminiError):
         parse_timetable(b"png-bytes", "image/png")
 
@@ -59,6 +64,6 @@ def test_parse_timetable_fixes_end_with_image_colors(monkeypatch, settings):
     png = io.BytesIO()
     Image.fromarray(pixels).save(png, format="PNG")
 
-    monkeypatch.setattr(timetable_ocr, "ask_json", lambda *a, **k: (grid([200, 100, 260, 900]), {}))
+    monkeypatch.setattr(llm, "ask_image_json", lambda *a, **k: (grid([200, 100, 260, 900]), {}))
     result = parse_timetable(png.getvalue(), "image/png")
     assert result == [Subject(name="자료구조", slots=[Slot(weekday=0, start="10:00", end="12:00")])]

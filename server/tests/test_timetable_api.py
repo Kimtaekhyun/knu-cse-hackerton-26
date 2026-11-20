@@ -5,6 +5,7 @@ from app.api.v1 import timetable as timetable_api
 from app.main import app
 from app.schemas.timetable import Slot, Subject
 from app.services import timetable_ocr
+from app.services.claude import ClaudeError
 from app.services.gemini import GeminiError
 
 URL = "/api/v1/timetable/parse"
@@ -59,3 +60,13 @@ def test_gemini_failure_is_502(monkeypatch):
     response = upload()
     assert response.status_code == 502
     assert response.json()["detail"] == "Gemini 사용 한도를 넘었어요(429)."
+
+
+def test_claude_failure_is_502(monkeypatch):
+    def fail(image, mime):
+        raise ClaudeError("Claude 사용 한도를 넘었어요(429).")
+
+    monkeypatch.setattr(timetable_ocr, "parse_timetable", fail)
+    response = upload()
+    assert response.status_code == 502
+    assert response.json()["detail"] == "Claude 사용 한도를 넘었어요(429)."

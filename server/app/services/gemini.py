@@ -20,6 +20,7 @@ from google.genai import errors, types
 from pydantic import BaseModel
 
 from app.core.config import get_settings
+from app.services.llm import LLMError
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ _calls_lock = threading.Lock()  # 여러 요청이 동시에 들어와도 한도
 _client = None
 
 
-class GeminiError(RuntimeError):
+class GeminiError(LLMError):
     """Gemini에 요청했지만 끝내 답을 받지 못함. 메시지는 사용자에게 그대로 보여 준다."""
 
 
