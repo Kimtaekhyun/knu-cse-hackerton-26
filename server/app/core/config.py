@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # 카카오 앱 ID (카카오 개발자 콘솔 > 앱 설정 > 앱 ID)
     # 다른 앱에서 받은 카카오 토큰을 거절할 때 쓴다
     kakao_app_id: int | None = None
+    # 업로드한 판서 사진 · 카드 조각을 저장하는 폴더 (app/storage/local.py)
+    # 로컬에서 uv로 실행할 때 기본값. docker compose 안에서는 MEDIA_DIR로 media 볼륨을 가리킨다
+    media_dir: Path = ROOT / "server" / "media"
 
 
 @lru_cache
