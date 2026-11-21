@@ -18,8 +18,8 @@ struct TimetableUploadScreen: View {
 
     private func steps(below: Bool = false) -> [String] {
         ["에브리타임 앱에서 시간표 탭 열기",
-         "시간표 전체가 보이게 화면 캡처",
-         below ? "아래에서 캡처 이미지 고르기" : "오른쪽에서 캡처 이미지 고르기"]
+         "설정 → 이미지로 저장",
+         below ? "아래에서 저장한 이미지 고르기" : "오른쪽에서 저장한 이미지 고르기"]
     }
 
     var body: some View {
@@ -36,21 +36,14 @@ struct TimetableUploadScreen: View {
                 .buttonStyle(.plain)
             }
 
-            // 안내
+            // 안내 (제목 · 에브리타임 '이미지로 저장' 방법)
             VStack(alignment: .leading, spacing: 0) {
                 Text("에브리타임 시간표를\n올려 주세요").ds(34, .bold, line: 1.35)
-                Color.clear.frame(width: 1, height: 14)
-                Text("시간표가 있으면 수업 시간에 찍은 판서가\n그 과목 폴더로 자동 정리돼요.")
-                    .ds(17, .regular, .dsSub, line: 1.55)
-                Color.clear.frame(width: 1, height: 36)
-
-                stepList(below: false)
-
-                Color.clear.frame(width: 1, height: 40)
-                Text("에브리타임은 공식 연동이 없어서 캡처 이미지로 시간표를 읽어요.")
-                    .ds(14, .regular, .dsSub)
+                    .frame(height: 124, alignment: .topLeading)
+                Color.clear.frame(width: 1, height: 90)
+                stepList(below: false, size: 20)
             }
-            .at(48, 112)
+            .at(89, 127)
 
             dropZone(width: 527, height: 586, preview: CGSize(width: 360, height: 260))
                 .at(619, 112)
@@ -64,7 +57,7 @@ struct TimetableUploadScreen: View {
     }
 
     /// 캡처 방법 1 · 2 · 3. 세로 화면은 업로드 영역이 아래라 `below`.
-    private func stepList(below: Bool) -> some View {
+    private func stepList(below: Bool, size: CGFloat = 17) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             ForEach(Array(steps(below: below).enumerated()), id: \.offset) { index, step in
                 HStack(spacing: 14) {
@@ -72,7 +65,7 @@ struct TimetableUploadScreen: View {
                         .frame(width: 28, height: 28)
                         .background(Color.black)
                         .clipShape(Circle())
-                    Text(step).ds(17, .medium)
+                    Text(step).ds(size, .medium)
                 }
             }
         }
@@ -372,21 +365,14 @@ extension TimetableUploadScreen {
 
                 // 안내
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("에브리타임 시간표를\n올려 주세요").ds(34, .bold, line: 1.35)
-                    Color.clear.frame(width: 1, height: 14)
-                    Text("시간표가 있으면 수업 시간에 찍은 판서가\n그 과목 폴더로 자동 정리돼요.")
-                        .ds(17, .regular, .dsSub, line: 1.55)
-                    Color.clear.frame(width: 1, height: 36)
+                    Text("에브리타임 시간표를 올려 주세요").ds(34, .bold, line: 1.35)
+                        .frame(height: 87, alignment: .topLeading)
                     stepList(below: true)
                 }
-                .at(48, 112)
+                .at(57, 134)
 
                 dropZone(width: 738, height: 555, preview: CGSize(width: 560, height: 300))
                     .at(48, 462)
-
-                Text("에브리타임은 공식 연동이 없어서 캡처 이미지로 시간표를 읽어요.")
-                    .ds(14, .regular, .dsSub)
-                    .at(48, 1037)
 
                 PortraitBottomBar(caption: picked ? "이미지 1장 선택됨" : "선택된 이미지 없음") {
                     PrimaryButton(title: "다음", width: 280, enabled: picked) {
@@ -404,7 +390,6 @@ extension TimetableUploadScreen {
         let inner = size.width - 40
         return NarrowPage(backTitle: "뒤로", barTitle: "시간표 등록", onBack: { router.pop() },
                           title: "에브리타임 시간표를 올려 주세요",
-                          detail: "시간표가 있으면 수업 시간에 찍은 판서가 그 과목 폴더로 자동 정리돼요.",
                           trailing: {
             Button { router.reset(to: .homeFirst) } label: { Text("나중에 할게요").ds(15, .medium, .dsSub) }
                 .buttonStyle(.plain)
@@ -445,7 +430,6 @@ extension TimetableUploadScreen {
             )
             .imageDrop(isTargeted: $dropTargeted, onDrop: pick)
 
-            Text("에브리타임은 공식 연동이 없어서 캡처 이미지로 시간표를 읽어요.").dsWrap(13, .regular, .dsSub)
         }, bottom: {
             NarrowBottomBar(caption: picked ? "이미지 1장 선택됨" : "선택된 이미지 없음") {
                 PrimaryButton(title: "다음", width: inner < 440 ? 150 : 200, enabled: picked) {
