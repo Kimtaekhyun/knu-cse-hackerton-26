@@ -15,13 +15,11 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from google.genai import types
 from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
-from app.core.config import get_settings
 from app.schemas.timetable import Slot, Subject
-from app.services.gemini import ask_json
+from app.services import llm
 
 SNAP_MINUTES = 30  # 칸 위치로 시간을 읽어 몇 분씩 어긋나므로 30분 단위로 맞춘다
 TIME_PATTERN = re.compile(r"^(\d{1,2}):(\d{2})$")
@@ -255,7 +253,7 @@ def grid_to_raw(grid: TimetableGrid, image: np.ndarray | None) -> RawTimetable:
 
 
 def decode_image(data: bytes) -> np.ndarray | None:
-    """이미지를 RGB 배열로. 열 수 없는 형식(HEIC 등)이면 None (색 보정 없이 진행)"""
+    """이미지를 RGB 배열로. 열 수 없는 형식이면 None (색 보정 없이 진행)"""
     try:
         with Image.open(io.BytesIO(data)) as opened:
             return np.asarray(ImageOps.exif_transpose(opened).convert("RGB"))
@@ -264,9 +262,8 @@ def decode_image(data: bytes) -> np.ndarray | None:
 
 
 def parse_timetable(image: bytes, mime_type: str) -> list[Subject]:
-    """시간표 캡처에서 과목 후보를 뽑는다. Gemini가 끝내 실패하면 GeminiError."""
-    contents = [types.Part.from_bytes(data=image, mime_type=mime_type), PROMPT]
-    grid, _ = ask_json(contents, TimetableGrid, model=get_settings().timetable_model)
+    """시간표 캡처에서 과목 후보를 뽑는다. AI가 끝내 실패하면 LLMError."""
+    grid, _ = llm.ask_image_json(image, mime_type, PROMPT, TimetableGrid, task="timetable")
     return normalize(grid_to_raw(grid, decode_image(image)))
 
 
@@ -275,5 +272,5 @@ if __name__ == "__main__":
     path = Path(sys.argv[1])
     mime = mimetypes.guess_type(path.name)[0] or "image/png"
     subjects = parse_timetable(path.read_bytes(), mime)
-    print(get_settings().timetable_model)
+    print(llm.model_for("timetable"))
     print(json.dumps([s.model_dump() for s in subjects], ensure_ascii=False, indent=2))

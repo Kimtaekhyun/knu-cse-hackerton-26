@@ -16,6 +16,7 @@ dependencies = [
     "psycopg[binary]",
     "alembic",
     "pyjwt>=2.15.1",
+    "anthropic>=2.11.0",
 ]
 
 [dependency-groups]
