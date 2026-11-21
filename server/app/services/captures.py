@@ -63,7 +63,9 @@ def find_resent(db: Session, user: User, capture_id: uuid.UUID) -> Capture | Non
     """
     capture = db.get(Capture, capture_id)
     if capture is not None and capture.user_id != user.id:
-        raise HTTPException(409, "이미 쓰인 판서 id예요.")
+        raise HTTPException(
+            409, "이미 쓰인 판서 id예요."
+        )  # 다른 사용지의 id면 남의 판서를 보게되는것.
     return capture
 
 
@@ -150,12 +152,15 @@ def create_capture(
         status=CaptureStatus.uploaded,
         original_key=original_key(capture_id, extension),
     )
-    storage.save(capture.original_key, image)
-    db.add(capture)
+    storage.save(capture.original_key, image)  # 1. 파일저장
+    db.add(capture)  # 2. db add
     try:
+        # 3. db 커밋 시도
+        # (만약 파일저장보다 db커밋을 먼저했을 떄,
+        #  db커밋 후 서버 꺼지면 "파일이 없는 판서 행"이 남음 )
         db.commit()
     except BaseException:
-        # DB에 못 남긴 사진은 아무도 찾을 수 없으니 지운다. 앱은 202를 못 받았으니 다시 보낸다
+        # DB에 못 남긴 사진은 아무도 찾을 수 없으니 지움. 앱은 202를 못 받았으니 다시 보냄
         db.rollback()
         storage.delete_tree(capture_dir(capture_id))
         raise
@@ -224,7 +229,8 @@ def list_captures(
     before: datetime | None,
     limit: int,
 ) -> list[Capture]:
-    """최신 판서부터. 조건은 함께 쓸 수 있다 (예: 미분류 + 옮기지 않은 카드가 남은 판서)
+    """최신 판서부터. 조건은
+    함께 쓸 수 있다 (예: 미분류 + 옮기지 않은 카드가 남은 판서)
 
     - subject_id: 과목 폴더
     - unsorted: 미분류함 (처리 상태와 관계없이 과목이 없는 판서)

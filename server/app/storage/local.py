@@ -14,7 +14,7 @@ from app.core.config import get_settings
 
 def path(key: str) -> Path:
     """키의 실제 파일 경로. MEDIA_DIR 밖을 가리키는 키(../ 등)는 거절한다"""
-    base = get_settings().media_dir.resolve()
+    base = get_settings().media_dir.resolve()  # resolve : Make the path absolute
     full = (base / key).resolve()
     if full == base or not full.is_relative_to(base):
         raise ValueError(f"잘못된 저장소 키예요: {key}")
@@ -29,13 +29,15 @@ def save(key: str, data: bytes) -> None:
     """
     target = path(key)
     target.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".tmp-")
+    fd, tmp = tempfile.mkstemp(
+        dir=target.parent, prefix=".tmp-"
+    )  # return value: a pair (fd, name) where fd is returned by os.open, and name is the filename.
     try:
         with os.fdopen(fd, "wb") as file:
             file.write(data)
-            file.flush()
-            os.fsync(file.fileno())
-        os.replace(tmp, target)
+            file.flush()  # flush : 파이썬 버퍼를 os로 보냄
+            os.fsync(file.fileno())  # fsync : os캐시를 실제 디스크에 기록
+        os.replace(tmp, target)  # os.replace()는 원자적.
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
