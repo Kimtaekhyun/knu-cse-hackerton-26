@@ -60,9 +60,13 @@ struct AccountScreen: View {
     private func settings(_ width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 22) {
             group("학기", width) {
-                row("현재 학기", value: "2026년 2학기", chevron: true) { router.push(.allSemesters) }
+                row("현재 학기", value: SemesterStore.shared.current?.label ?? (SemesterStore.shared.isLive ? "없음" : "2026년 2학기"), chevron: true) { router.push(.allSemesters) }
                 divider
-                row("시간표 수정", chevron: true) { router.push(.timetableConfirm) }
+                row("시간표 수정", chevron: true) {
+                    // 새 사진 없이 열면 06 이 서버의 현재 학기 과목을 불러와요.
+                    router.timetableImage = nil
+                    router.push(.timetableConfirm)
+                }
             }
             group("알림", width) {
                 toggleRow("수업 시작 알림", isOn: $classAlert)

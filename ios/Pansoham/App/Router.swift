@@ -52,6 +52,10 @@ final class Router {
     }
     /// 시간표 업로드(05)에서 고른 캡처. 시간표 확인(06)에서 원본으로 보여 줘요.
     var timetableImage: UIImage?
+    /// 메인 · 학기 화면에서 연 과목 (과목 상세 15 · 18 제목). nil 이면 샘플
+    var subject: SemesterAPI.SubjectDTO?
+    /// 전체 학기(21)에서 연 지난 학기 (22). nil 이면 샘플
+    var pastSemesterID: UUID?
     /// 메인 `앨범에서 선택` 으로 고른 판서 사진들. 처리 중(10)이 한 장씩 차례로 처리해요.
     var albumPhotos: [UIImage] = []
     /// 방금 처리한 사진 수. 2장 이상이면 결과(12)가 사진 탭을 보여 줘요.

@@ -27,10 +27,12 @@ enum APIError: LocalizedError {
     case invalidResponse
     /// 로그인 토큰이 만료되거나 무효예요 (다시 로그인해야 해요)
     case unauthorized
+    /// 서버가 404 로 답했어요 (예: 아직 현재 학기가 없음)
+    case notFound(String)
 
     var errorDescription: String? {
         switch self {
-        case .server(let message): message
+        case .server(let message), .notFound(let message): message
         case .unauthorized: "로그인이 만료됐어요. 다시 로그인해 주세요."
         case .unreachable: "서버에 연결할 수 없어요. 서버가 켜져 있는지 확인해 주세요."
         case .invalidResponse: "서버 응답을 읽지 못했어요."
@@ -103,6 +105,7 @@ enum APIClient {
                 throw APIError.unauthorized
             }
             if let failure = try? JSONDecoder().decode(ServerFailure.self, from: data) {
+                if http.statusCode == 404 { throw APIError.notFound(failure.detail) }
                 throw APIError.server(failure.detail)
             }
             throw APIError.invalidResponse

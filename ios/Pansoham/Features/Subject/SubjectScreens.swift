@@ -255,7 +255,7 @@ struct SubjectLessonsScreen: View {
             FolderNavBar(onBack: { router.popTo(.home) }, searching: $searching, query: $query) {
                 FolderMenu(router: router, switchTo: ("카드 모아 보기", .subjectCards))
             }
-            SubjectHeader(name: "자료구조", detail: "월 10:30–12:00 · 판서 12장 · 카드 34개", mode: 0) { mode in
+            SubjectHeader(name: router.subjectName("자료구조"), detail: router.subjectDetail("월 10:30–12:00 · 판서 12장 · 카드 34개"), mode: 0) { mode in
                 if mode == 1 { router.replace(.subjectCards, direction: .fade) }
             }
 
@@ -357,7 +357,7 @@ struct SubjectCardsScreen: View {
             FolderNavBar(onBack: { router.popTo(.home) }, searching: $searching, query: $query) {
                 FolderMenu(router: router, switchTo: ("수업별로 보기", .subjectLessons))
             }
-            SubjectHeader(name: "자료구조", detail: "월 10:30–12:00 · 판서 12장 · 카드 34개", mode: 1) { mode in
+            SubjectHeader(name: router.subjectName("자료구조"), detail: router.subjectDetail("월 10:30–12:00 · 판서 12장 · 카드 34개"), mode: 1) { mode in
                 if mode == 0 { router.replace(.subjectLessons, direction: .fade) }
             }
 
@@ -449,14 +449,14 @@ struct SubjectEmptyScreen: View {
     private var wide: some View {
         DesignCanvas {
             FolderNavBar(onBack: { router.pop() }, canSearch: false) { FolderMenu(router: router) }
-            SubjectHeader(name: "운영체제", detail: "금 10:30–12:00 · 판서 0장", mode: 0)
+            SubjectHeader(name: router.subjectName("운영체제"), detail: router.subjectDetail("금 10:30–12:00 · 판서 0장"), mode: 0)
 
             VStack(spacing: 0) {
                 Image("folder-empty-72")
                 Color.clear.frame(width: 1, height: 20)
                 Text("아직 찍은 판서가 없어요").ds(22, .bold)
                 Color.clear.frame(width: 1, height: 8)
-                Text("금요일 10:30 수업 시간에 찍으면 여기로 모여요").ds(17, .regular, .dsSub)
+                Text(router.subjectHint("금요일 10:30 수업 시간에 찍으면 여기로 모여요")).ds(17, .regular, .dsSub)
                 Color.clear.frame(width: 1, height: 28)
                 PrimaryButton(title: "판서 찍기") { router.push(.capture) }.zoomSource()
             }
@@ -472,7 +472,7 @@ struct SubjectEmptyScreen: View {
 extension SubjectLessonsScreen {
     func narrow(_ size: CGSize) -> some View {
         NarrowPage(backTitle: "chalkdrop", onBack: { router.popTo(.home) },
-                   title: "자료구조", detail: "월 10:30–12:00 · 판서 12장 · 카드 34개",
+                   title: router.subjectName("자료구조"), detail: router.subjectDetail("월 10:30–12:00 · 판서 12장 · 카드 34개"),
                    trailing: {
             FolderActions(onSearch: { searching = true }) {
                 FolderMenu(router: router, switchTo: ("카드 모아 보기", .subjectCards))
@@ -539,7 +539,7 @@ extension SubjectCardsScreen {
         let columnCount = inner >= 520 ? 2 : 1
         let cardWidth = (inner - 12 * CGFloat(columnCount - 1)) / CGFloat(columnCount)
         return NarrowPage(backTitle: "chalkdrop", onBack: { router.popTo(.home) },
-                          title: "자료구조", detail: "월 10:30–12:00 · 판서 12장 · 카드 34개",
+                          title: router.subjectName("자료구조"), detail: router.subjectDetail("월 10:30–12:00 · 판서 12장 · 카드 34개"),
                           trailing: {
             FolderActions(onSearch: { searching = true }) {
                 FolderMenu(router: router, switchTo: ("수업별로 보기", .subjectLessons))
@@ -637,7 +637,7 @@ extension SubjectCardsScreen {
 extension SubjectEmptyScreen {
     func narrow(_ size: CGSize) -> some View {
         NarrowPage(backTitle: "chalkdrop", onBack: { router.pop() },
-                   title: "운영체제", detail: "금 10:30–12:00 · 판서 0장",
+                   title: router.subjectName("운영체제"), detail: router.subjectDetail("금 10:30–12:00 · 판서 0장"),
                    trailing: { FolderActions(canSearch: false) { FolderMenu(router: router) } }, content: {
             NarrowModeToggle(mode: 0)
 
@@ -646,7 +646,7 @@ extension SubjectEmptyScreen {
                 Color.clear.frame(width: 1, height: 20)
                 Text("아직 찍은 판서가 없어요").ds(22, .bold)
                 Color.clear.frame(width: 1, height: 8)
-                Text("금요일 10:30 수업 시간에 찍으면 여기로 모여요")
+                Text(router.subjectHint("금요일 10:30 수업 시간에 찍으면 여기로 모여요"))
                     .dsWrap(15, .regular, .dsSub)
                     .multilineTextAlignment(.center)
                 Color.clear.frame(width: 1, height: 24)
@@ -655,5 +655,25 @@ extension SubjectEmptyScreen {
             .frame(maxWidth: .infinity)
             .padding(.top, size.height * 0.14)
         }, bottom: { EmptyView() })
+    }
+}
+
+// MARK: - 과목 제목 (메인에서 연 과목, 없으면 샘플)
+
+extension Router {
+    func subjectName(_ sample: String) -> String { subject?.name ?? sample }
+
+    func subjectDetail(_ sample: String) -> String {
+        subject.map { "\($0.timeText) · 판서 \($0.captureCount)장" } ?? sample
+    }
+
+    /// 빈 폴더 안내: 첫 수업 시간에 찍으면 모인다는 문구
+    func subjectHint(_ sample: String) -> String {
+        guard let subject else { return sample }
+        guard let slot = subject.slots.min(by: { ($0.weekday, $0.start) < ($1.weekday, $1.start) }) else {
+            return "시간이 없는 과목이라 미분류함에서 옮겨 와요"
+        }
+        let day = Slot.days.indices.contains(slot.weekday) ? Slot.days[slot.weekday] : "?"
+        return "\(day)요일 \(slot.start) 수업 시간에 찍으면 여기로 모여요"
     }
 }
