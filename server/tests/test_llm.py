@@ -12,7 +12,11 @@ class Dummy(BaseModel):
 
 def use(monkeypatch, provider):
     settings = SimpleNamespace(
-        llm_provider=provider, timetable_model="gemini-x", claude_timetable_model="claude-x"
+        llm_provider=provider,
+        timetable_model="gemini-x",
+        claude_timetable_model="claude-x",
+        gemini_model="gemini-note",
+        claude_note_model="claude-note",
     )
     monkeypatch.setattr(llm, "get_settings", lambda: settings)
 
@@ -21,6 +25,32 @@ def use(monkeypatch, provider):
 def test_model_for_follows_provider(monkeypatch, provider, model):
     use(monkeypatch, provider)
     assert llm.model_for("timetable") == model
+
+
+@pytest.mark.parametrize(
+    ("provider", "model"), [("gemini", "gemini-note"), ("claude", "claude-note")]
+)
+def test_note_model_follows_provider(monkeypatch, provider, model):
+    use(monkeypatch, provider)
+    assert llm.model_for("note") == model
+
+
+def test_gemini_parse_goes_to_gemini_only(monkeypatch):
+    """LaTeX 보정 같은 Gemini 전용 읽기 함수는 Gemini에만 넘긴다"""
+    use(monkeypatch, "gemini")
+    seen = {}
+
+    def fake(contents, schema, *, model, parse=None):
+        seen["parse"] = parse
+        return Dummy(value=1), {}
+
+    monkeypatch.setattr(gemini, "ask_json", fake)
+
+    def reader(text):
+        return Dummy(value=3)
+
+    llm.ask_image_json(b"img", "image/png", "p", Dummy, task="note", gemini_parse=reader)
+    assert seen["parse"] is reader
 
 
 def test_sends_to_gemini_by_setting(monkeypatch):

@@ -17,7 +17,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
 from app.models import Capture, CaptureStatus, Card, Semester, SemesterTerm, User
-from app.schemas.capture import CaptureDetail, CaptureOut, CardOut
+from app.schemas.capture import CaptureDetail, CaptureOut, CardOut, Destination
 from app.services import queries
 from app.services.semesters import get_subject, set_current
 from app.storage import local as storage
@@ -160,6 +160,33 @@ def create_capture(
         storage.delete_tree(capture_dir(capture_id))
         raise
     return capture
+
+
+def destination(db: Session, user: User, at: datetime) -> Destination:
+    """지금(at) 찍으면 어디에 저장되는지. 업로드의 자동 분류(classify)와 같은 규칙이다
+
+    조회만 하므로 학기가 없어도 만들지 않는다 (그때는 전부 null = 미분류함).
+    """
+    semester_id = db.scalar(
+        select(Semester.id).where(Semester.user_id == user.id, Semester.is_current)
+    )
+    if semester_id is None:
+        return Destination(semester_id=None, subject_id=None, subject_name=None)
+    slot = queries.current_slot(db, user.id, to_seoul(at))
+    if slot is None:
+        return Destination(semester_id=semester_id, subject_id=None, subject_name=None)
+    return Destination(
+        semester_id=semester_id, subject_id=slot.subject_id, subject_name=slot.subject.name
+    )
+
+
+def reset_for_retry(db: Session, capture: Capture) -> None:
+    """실패한 판서를 처음 상태로 되돌린다. 처리 중이거나 끝난 판서는 409"""
+    if capture.status != CaptureStatus.failed:
+        raise HTTPException(409, "처리에 실패한 판서만 다시 처리할 수 있어요.")
+    capture.status = CaptureStatus.uploaded
+    capture.fail_reason = None
+    db.commit()
 
 
 def move_capture(db: Session, user: User, capture: Capture, subject_id: uuid.UUID | None) -> None:

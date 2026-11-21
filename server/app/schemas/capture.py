@@ -50,3 +50,22 @@ class CaptureMove(BaseModel):
     """과목으로 옮기기. null을 보내면 미분류함으로 보낸다 (필드는 꼭 보내야 한다)"""
 
     subject_id: uuid.UUID | None
+
+
+class CaptureRetry(BaseModel):
+    """처리에 실패한 판서 다시 처리하기"""
+
+    # 화면을 못 찾아도 사진 그대로 쓴다 (오류 화면 11의 "그대로 쓰기")
+    skip_rectify: bool = False
+
+
+class Destination(BaseModel):
+    """지금 찍으면 어디에 저장되는지 (촬영 화면의 "○○ 폴더에 저장")
+
+    과목이 없으면 미분류함이다. 학기가 아직 없으면 semester_id도 null이고,
+    실제로 올릴 때 서버가 현재 학기를 만든다.
+    """
+
+    semester_id: uuid.UUID | None
+    subject_id: uuid.UUID | None
+    subject_name: str | None
