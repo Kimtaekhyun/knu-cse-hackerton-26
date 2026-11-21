@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,6 +13,14 @@ ROOT = Path(__file__).resolve().parents[3]
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
 
+    # 이미지 인식에 쓸 AI. gemini 또는 claude (services/llm.py가 이 값을 보고 보낸다)
+    llm_provider: Literal["gemini", "claude"] = "gemini"
+    # 실제 키는 .env의 ANTHROPIC_API_KEY에서 읽는다. ""는 .env에 없을 때 쓰는 값이다
+    anthropic_api_key: str = ""
+    # Claude로 시간표를 읽을 때 쓰는 모델
+    claude_timetable_model: str = "claude-haiku-5-5"
+    # Claude로 판서를 읽을 때 쓰는 모델
+    claude_note_model: str = "claude-haiku-5-5"
     gemini_api_key: str = ""
     # 판서 추출에 쓰는 기본 모델
     gemini_model: str = "gemini-3.5-flash-lite"
@@ -26,6 +35,11 @@ class Settings(BaseSettings):
     # 카카오 앱 ID (카카오 개발자 콘솔 > 앱 설정 > 앱 ID)
     # 다른 앱에서 받은 카카오 토큰을 거절할 때 쓴다
     kakao_app_id: int | None = None
+    # 업로드한 판서 사진 · 카드 조각을 저장하는 폴더 (app/storage/local.py)
+    # 로컬에서 uv로 실행할 때 기본값. docker compose 안에서는 MEDIA_DIR로 media 볼륨을 가리킨다
+    media_dir: Path = ROOT / "server" / "media"
+    # 판서를 동시에 몇 장까지 처리할지. 1이면 올린 순서대로 한 장씩 (AI 분당 한도 · 화면 순서)
+    pipeline_workers: int = 1
 
 
 @lru_cache
