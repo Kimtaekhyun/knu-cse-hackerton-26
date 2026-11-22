@@ -243,17 +243,55 @@ def refine_rows(image: np.ndarray, box: list[int]) -> tuple[int, int]:
     return round(top * 1000 / height), round((bottom + 1) * 1000 / height)
 
 
+def clamp_to_neighbors(
+    blocks: list[BlockBox], rows: list[tuple[float, float] | None]
+) -> list[tuple[float, float] | None]:
+    """색으로 늘린 위아래(rows)가 같은 요일 이웃 칸을 넘지 않게 자른다 (#110).
+
+    연강 두 칸의 색이 비슷하면 refine_rows가 경계를 넘어 두 칸을 하나로 늘린다.
+    모델은 두 칸을 따로 잡아 주므로, 같은 요일에서 아래 칸의 원래 윗변(모델 상자 ymin)을
+    두 칸의 경계로 본다. 칸 윗변은 과목명 글씨가 붙어 있어 모델이 잘 맞히고,
+    틀리기 쉬운 것은 아랫변이라 윗변을 기준으로 삼는다.
+    """
+    clamped = list(rows)
+    for i, block in enumerate(blocks):
+        row = rows[i]
+        if row is None:
+            continue
+        top, bottom = row
+        own_top = block.box_2d[0]
+        for j, other in enumerate(blocks):
+            if j == i or rows[j] is None or other.weekday != block.weekday:
+                continue
+            other_top = other.box_2d[0]
+            if other_top > own_top:  # 아래 칸: 그 칸 윗변에서 끝난다
+                bottom = min(bottom, other_top)
+            elif other_top < own_top:  # 위 칸: 내 윗변 위로는 올라가지 않는다
+                top = max(top, own_top)
+        if top < bottom:
+            clamped[i] = (top, bottom)
+    return clamped
+
+
 def grid_to_raw(grid: TimetableGrid, image: np.ndarray | None) -> RawTimetable:
     """모델이 읽은 위치를 시각으로 바꾼다. image가 있으면 칸 색으로 위아래를 먼저 맞춘다"""
     scale = hour_scale(grid.hours)
-    blocks = []
+    rows: list[tuple[float, float] | None] = []
     for block in grid.blocks:
+        if scale is None or len(block.box_2d) != 4:
+            rows.append(None)
+        elif image is not None:
+            rows.append(refine_rows(image, block.box_2d))
+        else:
+            rows.append((block.box_2d[0], block.box_2d[2]))
+    if image is not None:
+        rows = clamp_to_neighbors(grid.blocks, rows)
+
+    blocks = []
+    for block, row in zip(grid.blocks, rows, strict=True):
         start = end = ""
-        if scale is not None and len(block.box_2d) == 4:
-            top, bottom = block.box_2d[0], block.box_2d[2]
-            if image is not None:
-                top, bottom = refine_rows(image, block.box_2d)
-            start, end = position_text(top, scale), position_text(bottom, scale)
+        if scale is not None and row is not None:
+            start, end = position_text(row[0], scale), position_text(row[1], scale)
         blocks.append(RawBlock(name=block.name, weekday=block.weekday, start=start, end=end))
     return RawTimetable(blocks=blocks, untimed=grid.untimed)
 
