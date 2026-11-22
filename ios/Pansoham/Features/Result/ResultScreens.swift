@@ -154,8 +154,14 @@ struct ResultScreen: View {
             if !router.stack.contains(.result) {
                 router.processedCount = 1
                 flow.results = []
+                flow.openedFolder = nil
             }
         }
+    }
+
+    /// 뒤로: 과목 폴더에서 열었으면 폴더로, 아니면 메인으로
+    private func goBack() {
+        if flow.openedFolder != nil { router.pop() } else { router.popTo(.home) }
     }
 
     private var originalButton: some View {
@@ -171,7 +177,7 @@ struct ResultScreen: View {
 
     private var wide: some View {
         DesignCanvas {
-            NavBar(backTitle: backTitle, title: "", onBack: { router.popTo(.home) }) {
+            NavBar(backTitle: backTitle, title: "", onBack: { goBack() }) {
                 originalButton
             }
 
@@ -234,7 +240,7 @@ struct ResultScreen: View {
         return VStack(spacing: 0) {
             // 위 막대
             HStack {
-                Button { router.popTo(.home) } label: {
+                Button { goBack() } label: {
                     HStack(spacing: 2) {
                         Image("chevron-back-24")
                         Text(backTitle).ds(17, .medium)

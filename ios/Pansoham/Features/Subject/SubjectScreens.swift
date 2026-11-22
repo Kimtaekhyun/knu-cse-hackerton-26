@@ -201,6 +201,44 @@ struct LessonThumb: View {
     }
 }
 
+/// 서버 판서 사진 미리보기 (가운데를 채워 잘라요)
+struct PhotoThumb: View {
+    let photo: UIImage
+    let width: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        Image(uiImage: photo).resizable().scaledToFill()
+            .frame(width: width, height: height)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+/// 과목 판서를 못 불러왔을 때
+struct FolderLoadFailed: View {
+    let message: String
+    var retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("판서를 불러오지 못했어요").ds(20, .bold)
+            Text(message).ds(15, .regular, .dsSub)
+            GrayButton(title: "다시 시도", action: retry)
+        }
+    }
+}
+
+/// 과목 제목 아래 설명. 서버 판서를 다 받았으면 "시간 · 판서 N장 · 카드 M개"
+@MainActor
+func folderDetailText(_ router: Router, sample: String) -> String {
+    let store = SubjectCaptures.shared
+    guard let subject = router.subject, store.isLive(subject), store.isLoaded(subject.id) else {
+        return router.subjectDetail(sample)
+    }
+    return "\(subject.timeText) · 판서 \(store.items.count)장 · 카드 \(store.cardCount)개"
+}
+
 /// 회색 알약 모양 꼬리표
 struct TagChip: View {
     let title: String
@@ -219,6 +257,7 @@ struct TagChip: View {
 
 struct SubjectLessonsScreen: View {
     @Environment(Router.self) private var router
+    private func folderDetail(_ sample: String) -> String { folderDetailText(router, sample: sample) }
 
     private struct Lesson: Identifiable {
         let id: Int
@@ -228,11 +267,30 @@ struct SubjectLessonsScreen: View {
         let thumbs: [(CGFloat, CGFloat)]
         let tags: [String]
         var more: String? = nil
+        /// 서버 판서 사진 (있으면 샘플 미리보기 대신)
+        var photos: [UIImage] = []
+        /// 정리 중 · 실패 안내
+        var note: String? = nil
+        /// 결과 화면에 넘길 판서
+        var jobs: [CaptureFlow.Job] = []
     }
 
     @State private var searching = false
     @State private var query = ""
-    private var shownLessons: [Lesson] { lessons.filter { matches(query, [$0.date] + $0.tags) } }
+    private var store: SubjectCaptures { .shared }
+    /// 서버 판서를 보여 주는지 (로그인 + 실제 과목)
+    private var isLive: Bool { store.isLive(router.subject) }
+    private var allLessons: [Lesson] {
+        guard isLive else { return lessons }
+        return store.lessons.enumerated().map { index, lesson in
+            let tags = lesson.tags
+            return Lesson(id: index, date: lesson.title, summary: lesson.summary, today: lesson.isToday,
+                          thumbs: [], tags: tags.shown, more: tags.more,
+                          photos: lesson.items.compactMap(\.photo), note: lesson.statusNote,
+                          jobs: lesson.items.compactMap(\.job))
+        }
+    }
+    private var shownLessons: [Lesson] { allLessons.filter { matches(query, [$0.date] + $0.tags) } }
 
     private let lessons: [Lesson] = [
         .init(id: 0, date: "11월 17일 (월)", summary: "사진 2장 · 카드 5개", today: true,
@@ -255,16 +313,17 @@ struct SubjectLessonsScreen: View {
             FolderNavBar(onBack: { router.popTo(.home) }, searching: $searching, query: $query) {
                 FolderMenu(router: router, switchTo: ("카드 모아 보기", .subjectCards))
             }
-            SubjectHeader(name: router.subjectName("자료구조"), detail: router.subjectDetail("월 10:30–12:00 · 판서 12장 · 카드 34개"), mode: 0) { mode in
+            SubjectHeader(name: router.subjectName("자료구조"), detail: folderDetail("월 10:30–12:00 · 판서 12장 · 카드 34개"), mode: 0) { mode in
                 if mode == 1 { router.replace(.subjectCards, direction: .fade) }
             }
 
             // 수업 목록
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
-                    if shownLessons.isEmpty { NoSearchResult(query: query) }
+                    if let status = liveStatus { status.frame(width: 1098).padding(.top, 120) }
+                    else if shownLessons.isEmpty { NoSearchResult(query: query) }
                     ForEach(shownLessons) { lesson in
-                        Button { router.push(.result) } label: { row(lesson) }
+                        Button { open(lesson) } label: { row(lesson) }
                             .buttonStyle(.plain)
                     }
                 }
@@ -281,6 +340,32 @@ struct SubjectLessonsScreen: View {
 
             CaptureFAB { router.push(.capture) }
         }
+        .task { await reload() }
+    }
+
+    /// 판서 · 수업을 누르면: 서버 판서면 그 판서들의 결과 화면, 샘플이면 샘플 결과
+    private func open(_ lesson: Lesson) {
+        if isLive {
+            guard !lesson.jobs.isEmpty else { return }
+            CaptureFlow.shared.open(lesson.jobs, folder: router.subjectName(""))
+        }
+        router.push(.result)
+    }
+
+    /// 서버 판서 불러오기. 하나도 없으면 빈 폴더 화면(18)으로 바꿔요.
+    private func reload() async {
+        guard isLive, let id = router.subject?.id else { return }
+        await store.load(id)
+        if store.isLoaded(id), store.items.isEmpty { router.replace(.subjectEmpty, direction: .fade) }
+    }
+
+    /// 불러오는 중 · 실패 (서버 판서일 때만)
+    private var liveStatus: AnyView? {
+        guard isLive, !store.isLoaded(router.subject?.id) else { return nil }
+        if case .failed(let message) = store.state {
+            return AnyView(FolderLoadFailed(message: message) { Task { await reload() } })
+        }
+        return store.items.isEmpty ? AnyView(ProgressView().controlSize(.large)) : nil
     }
 
     private func row(_ lesson: Lesson) -> some View {
@@ -298,6 +383,7 @@ struct SubjectLessonsScreen: View {
                 }
                 Spacer()
                 HStack(spacing: 2) {
+                    if let note = lesson.note { Text(note).ds(15, .medium, .dsBlue).padding(.trailing, 8) }
                     Text(lesson.summary).ds(15, .medium, .dsSub)
                     Image("chevron-right-20")
                 }
@@ -305,6 +391,9 @@ struct SubjectLessonsScreen: View {
             HStack(spacing: 12) {
                 ForEach(Array(lesson.thumbs.enumerated()), id: \.offset) { _, thumb in
                     LessonThumb(x: thumb.0, y: thumb.1)
+                }
+                ForEach(Array(lesson.photos.enumerated()), id: \.offset) { _, photo in
+                    PhotoThumb(photo: photo, width: 168, height: 112)
                 }
             }
             HStack(spacing: 8) {
@@ -315,7 +404,7 @@ struct SubjectLessonsScreen: View {
         .padding(.vertical, 22)
         .frame(width: 1098, alignment: .leading)
         .overlay(alignment: .bottom) {
-            if lesson.id < lessons.count - 1 {
+            if lesson.id < allLessons.count - 1 {
                 Rectangle().fill(Color.dsLine).frame(height: 1)
             }
         }
@@ -327,14 +416,23 @@ struct SubjectLessonsScreen: View {
 
 struct SubjectCardsScreen: View {
     @Environment(Router.self) private var router
+    private func folderDetail(_ sample: String) -> String { folderDetailText(router, sample: sample) }
     @State private var filter = "전체"
     @State private var selection: Set<Int> = [1, 2, 3]
     @State private var copiedCount: Int?     // 좁은 화면에서 방금 복사한 카드 수
     @State private var searching = false
     @State private var query = ""
 
-    private let all = SampleData.subjectStickers
-    private let filters: [(name: String, count: Int)] = [("전체", 34), ("수식", 9), ("코드", 6), ("텍스트", 19)]
+    private var store: SubjectCaptures { .shared }
+    /// 서버 판서를 보여 주는지 (로그인 + 실제 과목)
+    private var isLive: Bool { store.isLive(router.subject) }
+    /// 서버 카드와 그 카드의 판서
+    private var liveCards: [(sticker: Sticker, item: SubjectCaptures.Item)] { isLive ? store.stickers : [] }
+    private var all: [Sticker] { isLive ? liveCards.map(\.sticker) : SampleData.subjectStickers }
+    private var filters: [(name: String, count: Int)] {
+        guard isLive else { return [("전체", 34), ("수식", 9), ("코드", 6), ("텍스트", 19)] }
+        return [("전체", all.count)] + ["수식", "코드", "텍스트"].map { kind in (kind, all.filter { $0.kind == kind }.count) }
+    }
 
     private var visible: [Sticker] {
         (filter == "전체" ? all : all.filter { $0.kind == filter })
@@ -357,9 +455,11 @@ struct SubjectCardsScreen: View {
             FolderNavBar(onBack: { router.popTo(.home) }, searching: $searching, query: $query) {
                 FolderMenu(router: router, switchTo: ("수업별로 보기", .subjectLessons))
             }
-            SubjectHeader(name: router.subjectName("자료구조"), detail: router.subjectDetail("월 10:30–12:00 · 판서 12장 · 카드 34개"), mode: 1) { mode in
+            SubjectHeader(name: router.subjectName("자료구조"), detail: folderDetail("월 10:30–12:00 · 판서 12장 · 카드 34개"), mode: 1) { mode in
                 if mode == 0 { router.replace(.subjectLessons, direction: .fade) }
             }
+
+            if let status = liveStatus { status.frame(width: DS.width).at(0, 380) }
 
             // 필터
             HStack(spacing: 8) {
@@ -385,7 +485,7 @@ struct SubjectCardsScreen: View {
                             ForEach(column) { sticker in
                                 StickerCard(sticker: sticker, width: 355,
                                             selected: selection.contains(sticker.id),
-                                            onTap: { router.push(.cardDetail) },
+                                            onTap: { open(sticker) },
                                             onCopy: { toggle(sticker.id) },
                                             onSelect: { toggle(sticker.id) })
                             }
@@ -430,6 +530,31 @@ struct SubjectCardsScreen: View {
             .overlay(alignment: .top) { Rectangle().fill(Color.dsLine).frame(height: 1) }
             .at(0, 730)
         }
+        .task { await reload() }
+    }
+
+    /// 카드를 누르면: 서버 카드면 그 판서의 결과 화면, 샘플이면 카드 상세
+    private func open(_ sticker: Sticker) {
+        guard isLive else { router.push(.cardDetail); return }
+        guard let job = liveCards.first(where: { $0.sticker.id == sticker.id })?.item.job else { return }
+        CaptureFlow.shared.open([job], folder: router.subjectName(""))
+        router.push(.result)
+    }
+
+    private func reload() async {
+        guard isLive, let id = router.subject?.id else { return }
+        if !store.isLoaded(id) { selection = [] }
+        await store.load(id)
+        if store.isLoaded(id), store.items.isEmpty { router.replace(.subjectEmpty, direction: .fade) }
+    }
+
+    /// 불러오는 중 · 실패 (서버 판서일 때만)
+    private var liveStatus: AnyView? {
+        guard isLive, !store.isLoaded(router.subject?.id) else { return nil }
+        if case .failed(let message) = store.state {
+            return AnyView(FolderLoadFailed(message: message) { Task { await reload() } })
+        }
+        return store.items.isEmpty ? AnyView(ProgressView().controlSize(.large)) : nil
     }
 
     private func toggle(_ id: Int) {
@@ -463,6 +588,15 @@ struct SubjectEmptyScreen: View {
             .frame(width: DS.width)
             .at(0, 330)
         }
+        .task { await reload() }
+    }
+
+    /// 판서 수는 0 이었지만 그사이 찍은 판서가 있으면 수업별(15)로 바꿔요.
+    func reload() async {
+        let store = SubjectCaptures.shared
+        guard store.isLive(router.subject), let id = router.subject?.id else { return }
+        await store.load(id)
+        if store.isLoaded(id), !store.items.isEmpty { router.replace(.subjectLessons, direction: .fade) }
     }
 }
 
@@ -472,7 +606,7 @@ struct SubjectEmptyScreen: View {
 extension SubjectLessonsScreen {
     func narrow(_ size: CGSize) -> some View {
         NarrowPage(backTitle: "chalkdrop", onBack: { router.popTo(.home) },
-                   title: router.subjectName("자료구조"), detail: router.subjectDetail("월 10:30–12:00 · 판서 12장 · 카드 34개"),
+                   title: router.subjectName("자료구조"), detail: folderDetail("월 10:30–12:00 · 판서 12장 · 카드 34개"),
                    trailing: {
             FolderActions(onSearch: { searching = true }) {
                 FolderMenu(router: router, switchTo: ("카드 모아 보기", .subjectCards))
@@ -484,9 +618,10 @@ extension SubjectLessonsScreen {
             }
 
             VStack(alignment: .leading, spacing: 0) {
-                if shownLessons.isEmpty { NoSearchResult(query: query) }
+                if let status = liveStatus { status.frame(maxWidth: .infinity).padding(.top, 80) }
+                else if shownLessons.isEmpty { NoSearchResult(query: query) }
                 ForEach(shownLessons) { lesson in
-                    Button { router.push(.result) } label: {
+                    Button { open(lesson) } label: {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 HStack(spacing: 8) {
@@ -502,11 +637,17 @@ extension SubjectLessonsScreen {
                                 Spacer(minLength: 0)
                                 Image("chevron-right-20")
                             }
-                            Text(lesson.summary).ds(14, .medium, .dsSub)
+                            HStack(spacing: 8) {
+                                Text(lesson.summary).ds(14, .medium, .dsSub)
+                                if let note = lesson.note { Text(note).ds(14, .medium, .dsBlue) }
+                            }
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 10) {
                                     ForEach(Array(lesson.thumbs.enumerated()), id: \.offset) { _, thumb in
                                         LessonThumb(x: thumb.0, y: thumb.1).scaledBox(168, 112, to: 132)
+                                    }
+                                    ForEach(Array(lesson.photos.enumerated()), id: \.offset) { _, photo in
+                                        PhotoThumb(photo: photo, width: 132, height: 88)
                                     }
                                 }
                             }
@@ -518,7 +659,7 @@ extension SubjectLessonsScreen {
                         .padding(.vertical, 18)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .overlay(alignment: .bottom) {
-                            if lesson.id < lessons.count - 1 { Rectangle().fill(Color.dsLine).frame(height: 1) }
+                            if lesson.id < allLessons.count - 1 { Rectangle().fill(Color.dsLine).frame(height: 1) }
                         }
                         .contentShape(Rectangle())
                     }
@@ -530,6 +671,7 @@ extension SubjectLessonsScreen {
         .overlay(alignment: .bottomTrailing) {
             NarrowFAB { router.push(.capture) }.padding(20)
         }
+        .task { await reload() }
     }
 }
 
@@ -539,7 +681,7 @@ extension SubjectCardsScreen {
         let columnCount = inner >= 520 ? 2 : 1
         let cardWidth = (inner - 12 * CGFloat(columnCount - 1)) / CGFloat(columnCount)
         return NarrowPage(backTitle: "chalkdrop", onBack: { router.popTo(.home) },
-                          title: router.subjectName("자료구조"), detail: router.subjectDetail("월 10:30–12:00 · 판서 12장 · 카드 34개"),
+                          title: router.subjectName("자료구조"), detail: folderDetail("월 10:30–12:00 · 판서 12장 · 카드 34개"),
                           trailing: {
             FolderActions(onSearch: { searching = true }) {
                 FolderMenu(router: router, switchTo: ("수업별로 보기", .subjectLessons))
@@ -549,6 +691,7 @@ extension SubjectCardsScreen {
             NarrowModeToggle(mode: 1) { mode in
                 if mode == 0 { router.replace(.subjectLessons, direction: .fade) }
             }
+            if let status = liveStatus { status.frame(maxWidth: .infinity).padding(.top, 80) }
 
             Flow(spacing: 8) {
                 ForEach(filters, id: \.name) { item in
@@ -572,7 +715,7 @@ extension SubjectCardsScreen {
                             let sticker = visible[index]
                             StickerCard(sticker: sticker, width: cardWidth,
                                         selected: selection.contains(sticker.id),
-                                        onTap: { router.push(.cardDetail) },
+                                        onTap: { open(sticker) },
                                         onCopy: { toggle(sticker.id) },
                                         onSelect: { toggle(sticker.id) })
                         }
@@ -616,6 +759,7 @@ extension SubjectCardsScreen {
                 }
             }
         })
+        .task { await reload() }
     }
 
     /// 고른 카드 글자를 한데 이은 것 (카드 사이 빈 줄)
@@ -655,6 +799,7 @@ extension SubjectEmptyScreen {
             .frame(maxWidth: .infinity)
             .padding(.top, size.height * 0.14)
         }, bottom: { EmptyView() })
+        .task { await reload() }
     }
 }
 

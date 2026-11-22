@@ -50,6 +50,8 @@ final class CaptureFlow {
     var failed: Job?
     /// 지금 찍으면 저장될 곳 ("자료구조 폴더" · "미분류함")
     var destination: CaptureDestination?
+    /// 과목 폴더(15 · 16)에서 저장된 판서를 열었으면 그 과목 이름. 결과 화면 뒤로 가기가 폴더로 돌아가요.
+    var openedFolder: String?
 
     /// 서버로 처리하는지 (로그인했을 때만)
     var isLive: Bool { AuthSession.shared.isLoggedIn }
@@ -59,6 +61,15 @@ final class CaptureFlow {
         jobs = photos.map { Job(id: UUID(), image: $0, takenAt: takenAt) }
         results = []
         failed = nil
+        openedFolder = nil
+    }
+
+    /// 과목 폴더에서 저장된 판서 열기 (처리 없이 바로 결과 화면)
+    func open(_ saved: [Job], folder: String) {
+        jobs = []
+        results = saved
+        failed = nil
+        openedFolder = folder
     }
 
     /// 실패한 사진을 다시 처리할 때 (이미 올린 판서라 다시 올리지 않아요)
@@ -76,6 +87,7 @@ final class CaptureFlow {
 
     /// 판서가 저장된 곳 이름 ("자료구조 폴더" · "미분류함")
     func placeTitle(of capture: CaptureDTO?) -> String {
+        if let openedFolder { return "\(openedFolder) 폴더" }
         guard let capture else { return destination?.placeTitle ?? "미분류함" }
         guard let subjectId = capture.subjectId else { return "미분류함" }
         if let destination, destination.subjectId == subjectId { return destination.placeTitle }

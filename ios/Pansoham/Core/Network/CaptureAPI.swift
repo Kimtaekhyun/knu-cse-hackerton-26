@@ -30,6 +30,8 @@ struct CaptureDTO: Decodable, Identifiable, Hashable {
     /// nil 이면 미분류함
     let subjectId: UUID?
     let takenAt: String
+    /// 수업 날짜 "2026-11-17" (서울 기준). 과목 폴더는 이 값으로 수업을 묶어요.
+    let classDate: String
     let status: Status
     /// rectify(화면을 못 찾음) · segment · interpret · unknown
     let failReason: String?
@@ -39,7 +41,7 @@ struct CaptureDTO: Decodable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, status, cards
-        case semesterId = "semester_id", subjectId = "subject_id", takenAt = "taken_at"
+        case semesterId = "semester_id", subjectId = "subject_id", takenAt = "taken_at", classDate = "class_date"
         case failReason = "fail_reason", cardCount = "card_count"
     }
 
@@ -49,6 +51,7 @@ struct CaptureDTO: Decodable, Identifiable, Hashable {
         semesterId = try c.decode(UUID.self, forKey: .semesterId)
         subjectId = try c.decodeIfPresent(UUID.self, forKey: .subjectId)
         takenAt = try c.decode(String.self, forKey: .takenAt)
+        classDate = try c.decodeIfPresent(String.self, forKey: .classDate) ?? String(takenAt.prefix(10))
         status = try c.decode(Status.self, forKey: .status)
         failReason = try c.decodeIfPresent(String.self, forKey: .failReason)
         cardCount = try c.decode(Int.self, forKey: .cardCount)
