@@ -3,6 +3,7 @@
 //  chalkdrop
 //
 //  07 메인 · 처음 (판서 0장) / 08 메인 (판서가 쌓인 뒤)
+//  로그인했으면 수업 중 · 오늘 수업 · 이번 주를 메인 화면 API(`GET /home`)로 보여 줘요 (#107).
 //
 
 import SwiftUI
@@ -19,19 +20,30 @@ struct HomeScreen: View {
     /// 앨범에서 고른 사진. 2장 이상이면 확인 창(08-2)을 띄워요.
     @State private var picked: [UIImage] = []
 
-    /// 08 에서만 카드 · 알림 · 막대가 차례로 나타나요. 07 은 처음부터 다 보여요.
-    private var shown: Bool { isFirst || appeared }
+    private var homeStore: HomeStore { HomeStore.shared }
+    /// 서버 메인 값 (로그인 전이면 nil → 샘플)
+    private var home: HomeAPI.HomeDTO? { live ? homeStore.home : nil }
+    /// 서버 값을 쓰는지 (로그인했는지)
+    private var live: Bool { AuthSession.shared.isLoggedIn }
+    /// 07(처음) 화면인지. 로그인했으면 정리한 판서가 0장일 때, 아니면 들어온 화면(07 · 08) 그대로
+    private var firstScreen: Bool { home.map { $0.totalCaptures == 0 } ?? isFirst }
 
-    private var counts: [Int] { isFirst ? [0, 0, 0, 0, 0, 0] : [12, 8, 5, 3, 0, 3] }
+    /// 08 에서만 카드 · 알림 · 막대가 차례로 나타나요. 07 은 처음부터 다 보여요.
+    private var shown: Bool { firstScreen || appeared }
+
+    private var counts: [Int] { firstScreen ? [0, 0, 0, 0, 0, 0] : [12, 8, 5, 3, 0, 3] }
 
     var body: some View {
         // 피그마 타임라인: 07 은 3.2초, 08 은 2.8초 되풀이 (안내 말풍선 · 수업 중 점)
-        Motion(loop: isFirst ? 3.2 : 2.8) { t in
+        Motion(loop: firstScreen ? 3.2 : 2.8) { t in
             Adaptive { canvas(t) } narrow: { narrow($0, t) }
         }
             .onAppear { appeared = true }
             .task {
+                // 메인 화면 값(수업 중 · 오늘 수업 · 이번 주)은 학기와 따로 받아요
+                async let homeValues: Void = HomeStore.shared.reload()
                 await SemesterStore.shared.reload()
+                await homeValues
                 // 로그인했으면 미분류함 수 · 아직 옮기지 않은 판서도 받아요
                 guard AuthSession.shared.isLoggedIn else { return }
                 async let unsorted: Void = SubjectCaptures.unsorted.load(.unsorted)
@@ -73,7 +85,7 @@ struct HomeScreen: View {
             leftColumn(t).at(24, 112)
             rightColumn.at(408, 112)
 
-            if isFirst && !menuOpen {
+            if firstScreen && !menuOpen {
                 // 첫 촬영 안내
                 Group {
                     Button { router.push(.capture) } label: {
@@ -92,7 +104,7 @@ struct HomeScreen: View {
                            : t < 1.4 ? tween(t, -8, 0, 0.7, 1.4, .inOut)
                            : t < 2.1 ? tween(t, 0, -8, 1.4, 2.1, .inOut)
                            : tween(t, -8, 0, 2.1, 2.8, .inOut))
-            } else if !isFirst {
+            } else if !firstScreen {
                 Image("bell-dot").at(1092, 49).allowsHitTesting(false)
             }
 
@@ -135,13 +147,13 @@ struct HomeScreen: View {
         VStack(alignment: .leading, spacing: 32) {
             nowCard(t)
             todayList()
-            if !isFirst && !PendingNote.current.isEmpty { pendingPanel() }
+            if !firstScreen && !PendingNote.current.isEmpty { pendingPanel() }
         }
     }
 
     private func nowCard(_ t: Double, width: CGFloat = 340) -> some View {
         // 수업 중 점: 0.6초마다 1 ↔ 0.25 (08 에만 있어요)
-        let dot = isFirst ? 1
+        let dot = firstScreen ? 1
             : t < 0.6 ? tween(t, 1, 0.25, 0, 0.6, .inOut)
             : t < 1.2 ? tween(t, 0.25, 1, 0.6, 1.2, .inOut)
             : t < 1.8 ? tween(t, 1, 0.25, 1.2, 1.8, .inOut)
@@ -150,28 +162,32 @@ struct HomeScreen: View {
     }
 
     private func nowCardBody(_ dot: Double, width: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let card = nowCardContent
+        return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Image("dot-blue-8").opacity(dot)
-                Text("수업 중").ds(14, .bold, .white)
+                // 수업 중일 때만 점이 깜빡여요
+                Image("dot-blue-8").opacity(card.inClass ? dot : 0.25)
+                Text(card.label).ds(14, .bold, .white)
             }
             Color.clear.frame(width: 1, height: 14)
-            Text("자료구조").ds(34, .bold, .white)
+            Text(card.title).ds(34, .bold, .white).lineLimit(1).minimumScaleFactor(0.6)
             Color.clear.frame(width: 1, height: 4)
-            Text("12:00에 끝나요").ds(15, .regular, .dsSub)
+            Text(card.detail).ds(15, .regular, .dsSub)
             Color.clear.frame(width: 1, height: 20)
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.2)).frame(width: width - 48, height: 6)
-                Capsule().fill(Color.dsBlue).frame(width: (width - 48) * 0.6, height: 6)
+            if let progress = card.progress {
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.2)).frame(width: width - 48, height: 6)
+                    Capsule().fill(Color.dsBlue).frame(width: (width - 48) * progress, height: 6)
+                }
+                Color.clear.frame(width: 1, height: 10)
+                HStack {
+                    Text(card.left).ds(12, .medium, .dsSub)
+                    Spacer()
+                    Text(card.right).ds(12, .medium, .white)
+                }
+                .frame(width: width - 48)
+                Color.clear.frame(width: 1, height: 20)
             }
-            Color.clear.frame(width: 1, height: 10)
-            HStack {
-                Text("10:30").ds(12, .medium, .dsSub)
-                Spacer()
-                Text("42분 남음").ds(12, .medium, .white)
-            }
-            .frame(width: width - 48)
-            Color.clear.frame(width: 1, height: 20)
         }
         .padding(.top, 22)
         .padding(.bottom, 24)
@@ -185,24 +201,48 @@ struct HomeScreen: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("오늘 수업").ds(20, .bold)
             Color.clear.frame(width: 1, height: 6)
-            todayRow(time: "10:30", name: "자료구조", bold: true, width: width) {
-                Text("지금").ds(12, .bold, .white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Color.dsBlue)
-                    .clipShape(Capsule())
+            if live {
+                let now = Self.nowMinute()
+                if home == nil {
+                    Text("불러오는 중…").ds(15, .regular, .dsSub).padding(.vertical, 10)
+                } else if todayClasses.isEmpty {
+                    Text("오늘은 수업이 없어요").ds(15, .regular, .dsSub).padding(.vertical, 10)
+                }
+                ForEach(Array(todayClasses.enumerated()), id: \.offset) { _, lesson in
+                    let ongoing = lesson.startMinute <= now && now < lesson.endMinute
+                    todayRow(time: lesson.start, name: lesson.name, bold: ongoing,
+                             muted: now >= lesson.endMinute, width: width) {
+                        if ongoing {
+                            nowPill
+                        } else if now >= lesson.endMinute {
+                            Text("끝남").ds(13, .regular, .dsSub)
+                        } else {
+                            Text(Self.after(lesson.startMinute - now)).ds(13, .regular, .dsSub)
+                        }
+                    }
+                }
+            } else {
+                todayRow(time: "10:30", name: "자료구조", bold: true, width: width) { nowPill }
+                todayRow(time: "13:00", name: "컴퓨터구조", width: width) { Text("2시간 뒤").ds(13, .regular, .dsSub) }
+                todayRow(time: "15:00", name: "이산수학", width: width) { Text("4시간 뒤").ds(13, .regular, .dsSub) }
             }
-            todayRow(time: "13:00", name: "컴퓨터구조", width: width) { Text("2시간 뒤").ds(13, .regular, .dsSub) }
-            todayRow(time: "15:00", name: "이산수학", width: width) { Text("4시간 뒤").ds(13, .regular, .dsSub) }
         }
     }
 
-    private func todayRow<Trailing: View>(time: String, name: String, bold: Bool = false, width: CGFloat = 340,
-                                          @ViewBuilder trailing: () -> Trailing) -> some View {
+    private var nowPill: some View {
+        Text("지금").ds(12, .bold, .white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Color.dsBlue)
+            .clipShape(Capsule())
+    }
+
+    private func todayRow<Trailing: View>(time: String, name: String, bold: Bool = false, muted: Bool = false,
+                                          width: CGFloat = 340, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack {
             HStack(spacing: 16) {
                 Text(time).ds(15, .medium, .dsSub)
-                Text(name).ds(17, bold ? .bold : .medium)
+                Text(name).ds(17, bold ? .bold : .medium, muted ? .dsSub : .black).lineLimit(1)
             }
             Spacer()
             trailing()
@@ -324,10 +364,10 @@ struct HomeScreen: View {
                               count: store.isLive ? SubjectCaptures.unsorted.items.count : counts[5], style: .dashed) { router.push(.unsorted) }
         guard store.isLive else {
             let samples: [(String, String, Screen)] = [
-                ("자료구조", "월 10:30–12:00", isFirst ? .subjectEmpty : .subjectLessons),
-                ("컴퓨터구조", "화 13:00–14:30", isFirst ? .subjectEmpty : .subjectLessons),
-                ("확률과 통계", "수 09:00–10:30", isFirst ? .subjectEmpty : .subjectLessons),
-                ("이산수학", "목 15:00–16:30", isFirst ? .subjectEmpty : .subjectLessons),
+                ("자료구조", "월 10:30–12:00", firstScreen ? .subjectEmpty : .subjectLessons),
+                ("컴퓨터구조", "화 13:00–14:30", firstScreen ? .subjectEmpty : .subjectLessons),
+                ("확률과 통계", "수 09:00–10:30", firstScreen ? .subjectEmpty : .subjectLessons),
+                ("이산수학", "목 15:00–16:30", firstScreen ? .subjectEmpty : .subjectLessons),
                 ("운영체제", "금 10:30–12:00", .subjectEmpty),
             ]
             return samples.enumerated().map { index, sample in
@@ -359,19 +399,16 @@ struct HomeScreen: View {
     // MARK: 이번 주
 
     private var weekChart: some View {
-        let bars: [(day: String, height: CGFloat, today: Bool)] = isFirst
-            ? ["월", "화", "수", "목", "금", "토", "일"].map { ($0, 6, false) }
-            : [("월", 54, false), ("화", 36, false), ("수", 24, false), ("목", 72, true),
-               ("금", 6, false), ("토", 6, false), ("일", 6, false)]
+        let bars = weekBars
 
         return VStack(alignment: .leading, spacing: 16) {
             HStack {
                 HStack(spacing: 10) {
                     Text("이번 주").ds(20, .bold)
-                    Text(isFirst ? "아직 정리한 판서가 없어요" : "판서 31장 정리").ds(15, .medium, .dsSub)
+                    Text(weekSummary).ds(15, .medium, .dsSub)
                 }
                 Spacer()
-                if !isFirst { Text("지난주보다 8장 더").ds(15, .bold) }
+                if let compare = weekCompare { Text(compare).ds(15, .bold) }
             }
             .frame(width: 746)
 
@@ -416,7 +453,7 @@ extension HomeScreen {
                 HStack(spacing: 20) {
                     Button { router.push(.pending) } label: {
                         Image("bell").overlay(alignment: .topLeading) {
-                            if !isFirst { Image("bell-dot").offset(x: 16, y: -1) }
+                            if !firstScreen { Image("bell-dot").offset(x: 16, y: -1) }
                         }
                     }
                     .buttonStyle(.plain)
@@ -437,7 +474,7 @@ extension HomeScreen {
                 VStack(alignment: .leading, spacing: 28) {
                     nowCard(t, width: inner)
                     todayList(inner)
-                    if !isFirst && !PendingNote.current.isEmpty { pendingPanel(inner) }
+                    if !firstScreen && !PendingNote.current.isEmpty { pendingPanel(inner) }
 
                     // 과목 폴더
                     VStack(alignment: .leading, spacing: 14) {
@@ -474,7 +511,7 @@ extension HomeScreen {
         .overlay { CaptureMenuDim(isOpen: $menuOpen) }
         .overlay(alignment: .bottomTrailing) {
             VStack(alignment: .trailing, spacing: 0) {
-                if isFirst && !menuOpen {
+                if firstScreen && !menuOpen {
                     VStack(alignment: .trailing, spacing: 0) {
                         Text("여기를 눌러 첫 판서를 찍어 보세요").ds(15, .bold, .white)
                             .padding(.horizontal, 18)
@@ -494,30 +531,137 @@ extension HomeScreen {
 
     /// 이번 주 막대 그래프 (너비에 맞춰 막대 굵기를 정해요)
     private func narrowWeek(_ width: CGFloat) -> some View {
-        let days = ["월", "화", "수", "목", "금", "토", "일"]
-        let heights: [CGFloat] = isFirst ? [6, 6, 6, 6, 6, 6, 6] : [54, 36, 24, 72, 6, 6, 6]
+        let bars = weekBars
         let bar = (width - 8 * 6) / 7
         return VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("이번 주").ds(20, .bold)
-                Text(isFirst ? "아직 정리한 판서가 없어요" : "판서 31장 정리").ds(14, .medium, .dsSub)
+                Text(weekSummary).ds(14, .medium, .dsSub)
                 Spacer(minLength: 0)
             }
             HStack(alignment: .bottom, spacing: 8) {
                 ForEach(0..<7, id: \.self) { index in
-                    let height = heights[index]
-                    let today = !isFirst && index == 3
+                    let height = bars[index].height
+                    let today = bars[index].today
                     VStack(spacing: 8) {
                         RoundedRectangle(cornerRadius: height <= 6 ? 3 : 8, style: .continuous)
                             .fill(today ? Color.dsBlue : height <= 6 ? Color.black.opacity(0.05) : Color.black.opacity(0.14))
                             .frame(width: bar, height: shown ? height : 6)
                             .animation(.easeOut(duration: 0.6).delay(0.5 + 0.06 * Double(index)), value: shown)
-                        Text(days[index]).ds(13, today ? .bold : .regular, today ? .black : .dsSub)
+                        Text(bars[index].day).ds(13, today ? .bold : .regular, today ? .black : .dsSub)
                     }
                 }
             }
             .frame(height: 100, alignment: .bottom)
-            if !isFirst { Text("지난주보다 8장 더").ds(15, .bold) }
+            if let compare = weekCompare { Text(compare).ds(15, .bold) }
         }
+    }
+}
+
+// MARK: - 메인 화면 값 (서버 · 샘플)
+
+extension HomeScreen {
+    /// 수업 중 카드에 들어갈 글자
+    struct NowCard {
+        var label: String
+        var title: String
+        var detail: String
+        var inClass = false
+        /// 진행 막대 (nil 이면 막대 없음)
+        var progress: CGFloat?
+        var left = ""
+        var right = ""
+    }
+
+    /// 오늘 수업 (시작 시각 순)
+    var todayClasses: [HomeAPI.ClassDTO] { (home?.today ?? []).sorted { $0.startMinute < $1.startMinute } }
+
+    /// 수업 중 → 다음 수업 → 오늘 끝 · 수업 없음 순으로 골라요.
+    /// 서버의 `now_class` 대신 오늘 수업과 지금 시각으로 계산해서, 화면을 켜 둔 채 수업이 바뀌어도 맞게 보여요.
+    var nowCardContent: NowCard {
+        guard live else {
+            return NowCard(label: "수업 중", title: "자료구조", detail: "12:00에 끝나요", inClass: true,
+                           progress: 0.6, left: "10:30", right: "42분 남음")
+        }
+        guard home != nil else { return NowCard(label: "오늘", title: "불러오는 중…", detail: " ") }
+        let now = Self.nowMinute()
+        if let lesson = todayClasses.first(where: { $0.startMinute <= now && now < $0.endMinute }) {
+            let length = max(1, lesson.endMinute - lesson.startMinute)
+            return NowCard(label: "수업 중", title: lesson.name, detail: "\(lesson.end)에 끝나요", inClass: true,
+                           progress: CGFloat(now - lesson.startMinute) / CGFloat(length),
+                           left: lesson.start, right: Self.remaining(lesson.endMinute - now))
+        }
+        if let next = todayClasses.first(where: { $0.startMinute > now }) {
+            return NowCard(label: "다음 수업", title: next.name, detail: "\(next.start)에 시작해요",
+                           progress: 0, left: "\(next.start)–\(next.end)", right: Self.after(next.startMinute - now))
+        }
+        if todayClasses.isEmpty {
+            return NowCard(label: "오늘", title: "수업 없는 날", detail: "찍은 판서는 미분류함에 모여요")
+        }
+        return NowCard(label: "오늘", title: "수업 끝", detail: "오늘 수업 \(todayClasses.count)개를 마쳤어요")
+    }
+
+    /// 이번 주 막대 (월~일). 가장 많은 날이 72, 판서가 없는 날은 6
+    var weekBars: [(day: String, height: CGFloat, today: Bool)] {
+        let names = ["월", "화", "수", "목", "금", "토", "일"]
+        guard let week = home?.week else {
+            let sample: [CGFloat] = firstScreen ? [6, 6, 6, 6, 6, 6, 6] : [54, 36, 24, 72, 6, 6, 6]
+            return names.indices.map { (names[$0], sample[$0], !firstScreen && $0 == 3) }
+        }
+        let counts = (week.days + Array(repeating: 0, count: 7)).prefix(7)
+        let most = max(1, counts.max() ?? 1)
+        let todayIndex = Self.dayIndex(weekStart: week.start)
+        return names.indices.map { index in
+            let count = counts[index]
+            let height: CGFloat = count == 0 ? 6 : max(14, 72 * CGFloat(count) / CGFloat(most))
+            return (names[index], height, index == todayIndex)
+        }
+    }
+
+    /// "판서 31장 정리" · "아직 정리한 판서가 없어요"
+    var weekSummary: String {
+        guard let week = home?.week else { return firstScreen ? "아직 정리한 판서가 없어요" : "판서 31장 정리" }
+        return week.total == 0 ? "이번 주에 정리한 판서가 없어요" : "판서 \(week.total)장 정리"
+    }
+
+    /// "지난주보다 8장 더" · "지난주보다 3장 덜" · "지난주와 같아요". 둘 다 0이면 안 보여요
+    var weekCompare: String? {
+        guard let week = home?.week else { return firstScreen ? nil : "지난주보다 8장 더" }
+        let diff = week.total - week.lastWeekTotal
+        if week.total == 0 && week.lastWeekTotal == 0 { return nil }
+        if diff > 0 { return "지난주보다 \(diff)장 더" }
+        if diff < 0 { return "지난주보다 \(-diff)장 덜" }
+        return "지난주와 같아요"
+    }
+
+    /// 지금이 하루 시작부터 몇 분째인지
+    static func nowMinute(_ date: Date = .now) -> Int {
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+    }
+
+    /// 이번 주 월요일("2026-11-16")부터 오늘이 몇 번째 날인지 (0 = 월). 이번 주가 아니면 nil
+    static func dayIndex(weekStart: String, today: Date = .now) -> Int? {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let start = formatter.date(from: weekStart) else { return nil }
+        let calendar = Calendar.current
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: start),
+                                           to: calendar.startOfDay(for: today)).day ?? -1
+        return (0..<7).contains(days) ? days : nil
+    }
+
+    /// 시작까지 남은 시간: "42분 뒤" · "2시간 뒤"
+    static func after(_ minutes: Int) -> String {
+        if minutes < 60 { return "\(max(1, minutes))분 뒤" }
+        return "\(Int((Double(minutes) / 60).rounded()))시간 뒤"
+    }
+
+    /// 끝까지 남은 시간: "42분 남음" · "1시간 12분 남음"
+    static func remaining(_ minutes: Int) -> String {
+        if minutes < 60 { return "\(max(1, minutes))분 남음" }
+        let rest = minutes % 60
+        return rest == 0 ? "\(minutes / 60)시간 남음" : "\(minutes / 60)시간 \(rest)분 남음"
     }
 }
