@@ -10,12 +10,53 @@
 import SwiftUI
 
 struct PendingNote: Identifiable {
-    let id = UUID()
+    var id = UUID()
     let title: String
     let detail: String
     /// 판서 사진에서 보여 줄 부분 (BoardPhoto 의 x · y)
-    let x: CGFloat
-    let y: CGFloat
+    var x: CGFloat = 0
+    var y: CGFloat = 0
+    /// 서버 판서 사진 (있으면 샘플 사진 대신)
+    var photo: UIImage? = nil
+    /// 누르면 열 결과 화면 (서버 판서)
+    var job: CaptureFlow.Job? = nil
+    /// 결과 화면 위쪽에 보일 곳 (과목 이름 · "미분류함")
+    var place: String = ""
+
+    /// 서버 판서를 쓰는지 (로그인했을 때)
+    static var isLive: Bool { AuthSession.shared.isLoggedIn }
+
+    /// 아직 옮기지 않은 판서 (서버). 최신부터
+    static var live: [PendingNote] {
+        let subjects = SemesterStore.shared.subjects
+        return SubjectCaptures.unmoved.latest.map { item in
+            let place = item.capture.subjectId.flatMap { id in subjects.first { $0.id == id }?.name } ?? "미분류함"
+            return PendingNote(id: item.id, title: item.placeAndDate(subjects: subjects), detail: item.unmovedSummary,
+                               photo: item.photo, job: item.job, place: place)
+        }
+    }
+
+    /// 화면에 보여 줄 목록: 로그인했으면 서버, 아니면 샘플
+    static var current: [PendingNote] { isLive ? live : SampleData.pending }
+
+    /// 누르면: 서버 판서면 그 판서의 결과 화면, 샘플이면 샘플 결과
+    func open(_ router: Router) {
+        if let job { CaptureFlow.shared.open([job], folder: place) } else if PendingNote.isLive { return }
+        router.push(.result)
+    }
+
+    /// 사진 미리보기
+    @ViewBuilder
+    func thumb(width: CGFloat, height: CGFloat, scale: CGFloat, radius: CGFloat) -> some View {
+        if let photo {
+            Image(uiImage: photo).resizable().scaledToFill()
+                .frame(width: width, height: height)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        } else {
+            BoardPhoto(width: width, height: height, scaleX: scale, scaleY: scale, x: x, y: y, radius: radius)
+        }
+    }
 }
 
 extension SampleData {
@@ -29,12 +70,22 @@ extension SampleData {
 struct PendingScreen: View {
     @Environment(Router.self) private var router
 
-    private let notes = SampleData.pending
+    private var notes: [PendingNote] { PendingNote.current }
     private let title = "아직 옮기지 않은 판서"
-    private var detail: String { "굿노트로 옮기지 않은 판서가 \(notes.count)개 있어요" }
+    private var detail: String {
+        if PendingNote.isLive, !SubjectCaptures.unmoved.isLoaded(.unmoved) {
+            if case .failed(let message) = SubjectCaptures.unmoved.state { return "불러오지 못했어요 · \(message)" }
+            return "불러오는 중…"
+        }
+        return notes.isEmpty ? "모든 판서를 옮겼어요" : "굿노트로 옮기지 않은 판서가 \(notes.count)개 있어요"
+    }
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
+            .task {
+                guard PendingNote.isLive else { return }
+                await SubjectCaptures.unmoved.load(.unmoved)
+            }
     }
 
     // MARK: 넓은 화면
@@ -49,9 +100,13 @@ struct PendingScreen: View {
             }
             .at(48, 96)
 
-            VStack(spacing: 12) {
-                ForEach(notes) { note in row(note, width: 720) }
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 12) {
+                    ForEach(notes) { note in row(note, width: 720) }
+                }
+                .padding(.bottom, 40)
             }
+            .frame(width: 720, height: DS.height - 200, alignment: .top)
             .at(48, 200)
         }
     }
@@ -70,9 +125,9 @@ struct PendingScreen: View {
     // MARK: 한 줄 (누르면 결과 화면)
 
     private func row(_ note: PendingNote, width: CGFloat) -> some View {
-        Button { router.push(.result) } label: {
+        Button { note.open(router) } label: {
             HStack(spacing: 16) {
-                BoardPhoto(width: 104, height: 80, scaleX: 1.6667, scaleY: 1.6667, x: note.x, y: note.y, radius: 12)
+                note.thumb(width: 104, height: 80, scale: 1.6667, radius: 12)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(note.title).ds(17, .bold)
                     Text(note.detail).ds(15, .regular, .dsSub)

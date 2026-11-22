@@ -2,8 +2,10 @@
 //  SubjectCaptures.swift
 //  chalkdrop
 //
-//  과목 폴더(15 수업별 · 16 카드 모아 보기)에 보여 줄 서버 판서 (#85).
-//  목록(`GET /captures?subject_id=`) → 처리 끝난 판서는 상세(카드) · 사진까지 받아 둬요.
+//  서버 판서 목록 (#85, #91). 목록 → 처리 끝난 판서는 상세(카드) · 사진까지 받아 둬요.
+//  - `shared`: 과목 폴더(15 수업별 · 16 카드 모아 보기) `GET /captures?subject_id=`
+//  - `unsorted`: 미분류함(19 · 20) `GET /captures?unsorted=true`
+//  - `unmoved`: 메인(08) · 알림의 아직 옮기지 않은 판서 `GET /captures?unmoved=true`
 //  로그인하지 않았거나 메인에서 샘플 폴더를 열었으면 쓰지 않아요 (샘플 화면 그대로).
 //
 
@@ -12,8 +14,15 @@ import SwiftUI
 @Observable
 final class SubjectCaptures {
     static let shared = SubjectCaptures()
+    static let unsorted = SubjectCaptures()
+    static let unmoved = SubjectCaptures()
 
     enum State: Equatable { case idle, loading, loaded, failed(String) }
+
+    /// 어떤 판서 목록인지
+    enum Source: Equatable {
+        case subject(UUID), unsorted, unmoved
+    }
 
     /// 판서 한 장 + 받아 둔 사진
     struct Item: Identifiable {
@@ -50,8 +59,10 @@ final class SubjectCaptures {
         var cardCount: Int { items.map(\.capture.cardCount).reduce(0, +) }
     }
 
-    private(set) var subjectID: UUID?
+    private(set) var source: Source?
     private(set) var state: State = .idle
+    /// 과목 폴더면 그 과목 id
+    var subjectID: UUID? { if case .subject(let id) = source { id } else { nil } }
     private(set) var items: [Item] = []
 
     /// 서버 판서를 쓰는지 (로그인 + 메인에서 실제 과목을 열었을 때)
@@ -71,7 +82,15 @@ final class SubjectCaptures {
     }
 
     /// 이 과목 판서를 다 받았는지
-    func isLoaded(_ subjectID: UUID?) -> Bool { state == .loaded && self.subjectID == subjectID }
+    func isLoaded(_ subjectID: UUID?) -> Bool { state == .loaded && subjectID != nil && self.subjectID == subjectID }
+    /// 이 목록을 다 받았는지
+    func isLoaded(_ source: Source) -> Bool { state == .loaded && self.source == source }
+
+    /// 옮긴 판서를 목록에서 바로 빼요 (서버는 이미 반영됨)
+    func remove(_ id: UUID) { items.removeAll { $0.id == id } }
+
+    /// 최신 판서부터
+    var latest: [Item] { items.sorted { $0.capture.takenAt > $1.capture.takenAt } }
 
     /// 모든 카드. 화면용 번호(`id`)는 겹치지 않게 1부터 다시 매겨요.
     var stickers: [(sticker: Sticker, item: Item)] {
@@ -88,18 +107,27 @@ final class SubjectCaptures {
 
     var cardCount: Int { items.map(\.capture.cardCount).reduce(0, +) }
 
-    /// 과목 판서 불러오기. 같은 과목을 다시 열면 받아 둔 걸 먼저 보여 주고 새로 받아요.
+    /// 과목 판서 불러오기
     @MainActor
-    func load(_ subjectID: UUID) async {
-        if self.subjectID != subjectID {
-            self.subjectID = subjectID
+    func load(_ subjectID: UUID) async { await load(.subject(subjectID)) }
+
+    /// 판서 불러오기. 같은 목록을 다시 열면 받아 둔 걸 먼저 보여 주고 새로 받아요.
+    @MainActor
+    func load(_ source: Source) async {
+        if self.source != source {
+            self.source = source
             items = []
             state = .loading
         } else if case .failed = state {
             state = .loading
         }
         do {
-            let list = try await CaptureAPI.list(subjectId: subjectID)
+            let list: [CaptureDTO]
+            switch source {
+            case .subject(let id): list = try await CaptureAPI.list(subjectId: id)
+            case .unsorted: list = try await CaptureAPI.list(unsorted: true)
+            case .unmoved: list = try await CaptureAPI.list(unmoved: true)
+            }
             let old = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
             let loaded = await withTaskGroup(of: Item.self) { group in
                 for capture in list {
@@ -110,11 +138,11 @@ final class SubjectCaptures {
                 for await item in group { result.append(item) }
                 return result
             }
-            guard self.subjectID == subjectID else { return }
+            guard self.source == source else { return }
             items = loaded
             state = .loaded
         } catch {
-            guard self.subjectID == subjectID else { return }
+            guard self.source == source else { return }
             state = .failed(error.localizedDescription)
         }
     }
@@ -178,5 +206,51 @@ extension SubjectCaptures.Lesson {
         if working > 0 { return "\(working)장 정리 중" }
         if failed > 0 { return "\(failed)장 정리 실패" }
         return nil
+    }
+}
+
+extension SubjectCaptures.Item {
+    /// "11월 16일 (일) 21:14"
+    var dateText: String { format("M월 d일 (E) HH:mm") }
+    /// "11월 16일 21:14"
+    var shortDateText: String { format("M월 d일 HH:mm") }
+
+    private func format(_ pattern: String) -> String {
+        guard let date = capture.takenDate else { return capture.classDate }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = pattern
+        return formatter.string(from: date)
+    }
+
+    /// 카드 제목 요약: "카드 4개 · 스택의 연산, 큐의 연산 외 2개". 정리 중 · 실패면 그 안내
+    var cardSummary: String {
+        switch capture.status {
+        case .failed: return "정리하지 못했어요"
+        case .done: break
+        default: return "정리 중이에요"
+        }
+        let titles = capture.cards.sorted { $0.orderNo < $1.orderNo }.map(\.title)
+        guard !titles.isEmpty else { return "카드 \(capture.cardCount)개" }
+        let head = titles.prefix(2).joined(separator: ", ")
+        return "카드 \(capture.cardCount)개 · \(head)" + (titles.count > 2 ? " 외 \(titles.count - 2)개" : "")
+    }
+
+    /// 아직 옮기지 않은 판서 설명: 오늘이면 "카드 N개 · 굿노트로 옮기지 않았어요", 아니면 "N일째 그대로예요"
+    var unmovedSummary: String {
+        let count = capture.unmovedCount
+        let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: capture.takenDate ?? .now),
+                                                   to: Calendar.current.startOfDay(for: .now)).day ?? 0
+        return days <= 0 ? "카드 \(count)개 · 굿노트로 옮기지 않았어요" : "카드 \(count)개 · \(days)일째 그대로예요"
+    }
+
+    /// "자료구조 · 오늘 10:42" / "컴퓨터구조 · 11월 11일"
+    func placeAndDate(subjects: [SemesterAPI.SubjectDTO]) -> String {
+        let place = capture.subjectId.flatMap { id in subjects.first { $0.id == id }?.name } ?? "미분류함"
+        guard let date = capture.takenDate else { return place }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = Calendar.current.isDateInToday(date) ? "'오늘' HH:mm" : "M월 d일"
+        return "\(place) · \(formatter.string(from: date))"
     }
 }

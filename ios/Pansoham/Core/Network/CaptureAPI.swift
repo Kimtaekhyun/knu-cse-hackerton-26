@@ -36,13 +36,15 @@ struct CaptureDTO: Decodable, Identifiable, Hashable {
     /// rectify(화면을 못 찾음) · segment · interpret · unknown
     let failReason: String?
     let cardCount: Int
+    /// 아직 옮기지 않은 카드 수
+    let unmovedCount: Int
     /// 목록 응답에는 없고 상세에만 있어요
     var cards: [CardDTO] = []
 
     enum CodingKeys: String, CodingKey {
         case id, status, cards
         case semesterId = "semester_id", subjectId = "subject_id", takenAt = "taken_at", classDate = "class_date"
-        case failReason = "fail_reason", cardCount = "card_count"
+        case failReason = "fail_reason", cardCount = "card_count", unmovedCount = "unmoved_count"
     }
 
     init(from decoder: Decoder) throws {
@@ -55,6 +57,7 @@ struct CaptureDTO: Decodable, Identifiable, Hashable {
         status = try c.decode(Status.self, forKey: .status)
         failReason = try c.decodeIfPresent(String.self, forKey: .failReason)
         cardCount = try c.decode(Int.self, forKey: .cardCount)
+        unmovedCount = try c.decodeIfPresent(Int.self, forKey: .unmovedCount) ?? 0
         cards = try c.decodeIfPresent([CardDTO].self, forKey: .cards) ?? []
     }
 
@@ -136,9 +139,11 @@ enum CaptureAPI {
         try await APIClient.json("GET", path: "api/v1/captures/\(id.uuidString)", as: CaptureDTO.self)
     }
 
-    /// 목록 (최신부터). 미분류함은 `unsorted: true`, 과목 폴더는 `subjectId`
-    static func list(subjectId: UUID? = nil, unsorted: Bool = false) async throws -> [CaptureDTO] {
+    /// 목록 (최신부터). 미분류함은 `unsorted: true`, 과목 폴더는 `subjectId`,
+    /// 아직 옮기지 않은 카드가 남은 판서는 `unmoved: true`
+    static func list(subjectId: UUID? = nil, unsorted: Bool = false, unmoved: Bool = false) async throws -> [CaptureDTO] {
         var query: [URLQueryItem] = []
+        if unmoved { query.append(URLQueryItem(name: "unmoved", value: "true")) }
         if let subjectId { query.append(URLQueryItem(name: "subject_id", value: subjectId.uuidString)) }
         if unsorted { query.append(URLQueryItem(name: "unsorted", value: "true")) }
         let data = try await APIClient.raw("GET", path: "api/v1/captures", query: query)

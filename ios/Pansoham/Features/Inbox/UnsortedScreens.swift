@@ -19,10 +19,27 @@ struct UnsortedScreen: View {
         let shortDate: String
         let cards: Int
         let detail: String
-        let x: CGFloat, y: CGFloat
+        var x: CGFloat = 0, y: CGFloat = 0
+        /// 서버 판서 (로그인했을 때)
+        var captureID: UUID? = nil
+        var photo: UIImage? = nil
+
+        static func == (a: Item, b: Item) -> Bool { a.id == b.id && a.captureID == b.captureID }
     }
 
-    @State private var items: [Item] = [
+    private var store: SubjectCaptures { .unsorted }
+    /// 서버 판서를 쓰는지 (로그인했을 때)
+    private var isLive: Bool { AuthSession.shared.isLoggedIn }
+    /// 화면에 보여 줄 목록: 로그인했으면 서버, 아니면 샘플
+    private var items: [Item] {
+        guard isLive else { return samples }
+        return store.latest.enumerated().map { index, item in
+            Item(id: index, date: item.dateText, shortDate: item.shortDateText, cards: item.capture.cardCount,
+                 detail: item.cardSummary, captureID: item.id, photo: item.photo)
+        }
+    }
+
+    @State private var samples: [Item] = [
         .init(id: 0, date: "11월 16일 (일) 21:14", shortDate: "11월 16일 21:14", cards: 4,
               detail: "카드 4개 · 스택의 연산, 큐의 연산 외 2개", x: -0.6333, y: -0.8443),
         .init(id: 1, date: "11월 15일 (토) 14:02", shortDate: "11월 15일 14:02", cards: 2,
@@ -34,12 +51,90 @@ struct UnsortedScreen: View {
     @State private var target = "자료구조"
     @State private var searching = false
     @State private var query = ""
+    @State private var movingNow = false
+    @State private var moveError: String?
     private var shownItems: [Item] { items.filter { matches(query, [$0.date, $0.detail]) } }
 
-    private let subjects = SampleData.timetable.map(\.name)
+    /// 옮길 과목: 로그인했으면 현재 학기 과목, 아니면 샘플
+    private var subjects: [String] {
+        isLive ? SemesterStore.shared.subjects.map(\.name) : SampleData.timetable.map(\.name)
+    }
+    private var firstSubject: String { subjects.first ?? "" }
+
+    /// 위쪽 설명
+    private var headerDetail: String {
+        if isLive, !store.isLoaded(.unsorted) {
+            if case .failed(let message) = store.state { return "불러오지 못했어요 · \(message)" }
+            return "불러오는 중…"
+        }
+        return items.isEmpty ? "미분류 판서가 없어요 · 수업 시간 밖에서 찍으면 여기로 모여요"
+            : "시간표 밖에서 찍은 판서 \(items.count)장 · 과목으로 옮겨 정리하세요"
+    }
+
+    /// 사진 미리보기
+    @ViewBuilder
+    private func thumb(_ item: Item, width: CGFloat = 168, height: CGFloat = 112) -> some View {
+        if let photo = item.photo {
+            PhotoThumb(photo: photo, width: width, height: height)
+        } else if item.captureID != nil {
+            RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.black.opacity(0.05))
+                .frame(width: width, height: height)
+        } else {
+            LessonThumb(x: item.x, y: item.y).scaledBox(168, 112, to: width)
+        }
+    }
+
+    /// 판서를 누르면 그 판서의 결과 화면 (서버 판서일 때)
+    private func open(_ item: Item) {
+        guard let id = item.captureID, let job = store.items.first(where: { $0.id == id })?.job else { return }
+        CaptureFlow.shared.open([job], folder: "미분류함")
+        router.push(.result)
+    }
+
+    /// 서버에서 다시 받기 (로그인했을 때). 옮길 과목도 함께
+    private func reload() async {
+        guard isLive else { return }
+        if SemesterStore.shared.subjects.isEmpty { await SemesterStore.shared.reload() }
+        await store.load(.unsorted)
+        if startsMoving, moving == nil, let first = items.first {
+            target = firstSubject
+            withAnimation(.easeOut(duration: 0.3)) { moving = first }
+        }
+    }
+
+    /// 고른 과목으로 옮기기. 서버 판서면 `PATCH /captures/{id}` 뒤에 목록에서 빼요.
+    private func move(_ item: Item) {
+        guard isLive, let id = item.captureID else {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                samples.removeAll { $0.id == item.id }
+                moving = nil
+            }
+            return
+        }
+        guard let subject = SemesterStore.shared.subjects.first(where: { $0.name == target }) else { return }
+        movingNow = true
+        Task {
+            defer { movingNow = false }
+            do {
+                _ = try await CaptureAPI.move(id, to: subject.id)
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    store.remove(id)
+                    moving = nil
+                }
+            } catch {
+                moveError = error.localizedDescription
+            }
+        }
+    }
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
+            .task { await reload() }
+            .alert("옮기지 못했어요", isPresented: Binding(get: { moveError != nil }, set: { if !$0 { moveError = nil } })) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(moveError ?? "")
+            }
     }
 
     private var wide: some View {
@@ -47,22 +142,27 @@ struct UnsortedScreen: View {
             FolderNavBar(onBack: { router.popTo(.home) }, searching: $searching, query: $query) {
                 FolderMenu(router: router)
             }
-            SubjectHeader(name: "미분류함",
-                          detail: "시간표 밖에서 찍은 판서 \(items.count)장 · 과목으로 옮겨 정리하세요")
+            SubjectHeader(name: "미분류함", detail: headerDetail)
 
             // 미분류 목록
             VStack(alignment: .leading, spacing: 0) {
                 if shownItems.isEmpty && !items.isEmpty { NoSearchResult(query: query) }
                 ForEach(shownItems) { item in
                     HStack(spacing: 20) {
-                        LessonThumb(x: item.x, y: item.y)
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(item.date).ds(20, .bold)
-                            Text(item.detail).ds(15, .regular, .dsSub)
+                        Button { open(item) } label: {
+                            HStack(spacing: 20) {
+                                thumb(item)
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(item.date).ds(20, .bold)
+                                    Text(item.detail).ds(15, .regular, .dsSub)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .contentShape(Rectangle())
                         }
-                        Spacer(minLength: 0)
+                        .buttonStyle(.plain)
                         Button {
-                            target = "자료구조"
+                            target = firstSubject
                             withAnimation(.easeOut(duration: 0.3)) { moving = item }
                         } label: {
                             Text("과목으로 옮기기").ds(16, .bold)
@@ -98,7 +198,7 @@ struct UnsortedScreen: View {
             }
         }
         .onAppear {
-            if startsMoving { withAnimation(.easeOut(duration: 0.3)) { moving = items.first } }
+            if startsMoving, !isLive { withAnimation(.easeOut(duration: 0.3)) { moving = items.first } }
         }
     }
 
@@ -110,6 +210,10 @@ struct UnsortedScreen: View {
             Text("\(item.shortDate) · 카드 \(item.cards)개").ds(15, .regular, .dsSub)
             Color.clear.frame(width: 1, height: 16)
 
+            if subjects.isEmpty {
+                Text("옮길 과목이 없어요. 시간표를 먼저 등록해 주세요.").ds(15, .regular, .dsSub)
+                    .padding(.vertical, 14)
+            }
             ForEach(subjects, id: \.self) { subject in
                 let on = target == subject
                 Button { target = subject } label: {
@@ -134,11 +238,9 @@ struct UnsortedScreen: View {
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                PrimaryButton(title: "\(target)로 옮기기", width: 294) {
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        items.removeAll { $0.id == item.id }
-                        moving = nil
-                    }
+                PrimaryButton(title: movingNow ? "옮기는 중…" : "\(target)로 옮기기", width: 294,
+                              enabled: !movingNow && subjects.contains(target)) {
+                    move(item)
                 }
             }
         }
@@ -161,7 +263,7 @@ extension UnsortedScreen {
     func narrow(_ size: CGSize) -> some View {
         NarrowPage(backTitle: "chalkdrop", onBack: { router.popTo(.home) },
                    title: "미분류함",
-                   detail: "시간표 밖에서 찍은 판서 \(items.count)장 · 과목으로 옮겨 정리하세요",
+                   detail: headerDetail,
                    trailing: {
             FolderActions(onSearch: { searching = true }) { FolderMenu(router: router) }
         }, content: {
@@ -170,12 +272,13 @@ extension UnsortedScreen {
                 if shownItems.isEmpty && !items.isEmpty { NoSearchResult(query: query) }
                 ForEach(shownItems) { item in
                     HStack(alignment: .top, spacing: 14) {
-                        LessonThumb(x: item.x, y: item.y).scaledBox(168, 112, to: 120)
+                        Button { open(item) } label: { thumb(item, width: 120, height: 80) }
+                            .buttonStyle(.plain)
                         VStack(alignment: .leading, spacing: 6) {
                             Text(item.date).dsWrap(17, .bold)
                             Text(item.detail).dsWrap(14, .regular, .dsSub)
                             Button {
-                                target = "자료구조"
+                                target = firstSubject
                                 withAnimation(.easeOut(duration: 0.3)) { moving = item }
                             } label: {
                                 Text("과목으로 옮기기").ds(14, .bold)
@@ -216,7 +319,7 @@ extension UnsortedScreen {
             }
         }
         .onAppear {
-            if startsMoving { withAnimation(.easeOut(duration: 0.3)) { moving = items.first } }
+            if startsMoving, !isLive { withAnimation(.easeOut(duration: 0.3)) { moving = items.first } }
         }
     }
 }
