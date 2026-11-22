@@ -14,12 +14,13 @@ struct InkCrop: View {
     let height: CGFloat
 
     var body: some View {
-        // 원본(372 × 279)에서 카드 너비가 틀에 꽉 차게 키우고, 세로는 가운데를 보여 줘요.
-        let scale = width / sticker.w
+        // 원본(372 × 279, 서버 사진은 372 × 372·비율)에서 카드 너비가 틀에 꽉 차게 키우고, 세로는 가운데를 보여 줘요.
+        let scale = width / max(sticker.w, 1)
         let top = sticker.y + (sticker.h - height / scale) / 2
-        Image("board-photo")
-            .resizable()
-            .frame(width: 372 * scale, height: 279 * scale)
+        Group {
+            if let photo = sticker.photo { Image(uiImage: photo).resizable() } else { Image("board-photo").resizable() }
+        }
+            .frame(width: 372 * scale, height: 372 * sticker.photoAspect * scale)
             .offset(x: -sticker.x * scale, y: -top * scale)
             .frame(width: width, height: height, alignment: .topLeading)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -27,15 +28,23 @@ struct InkCrop: View {
 }
 
 /// 원본 사진 + 카드 자리 표시 (372 × 279 기준, `scale` 로 크기 조절)
+/// `photo` 를 넘기면 서버 사진을 그 비율(372 × 372·aspect) 그대로 보여 줘요.
 struct MarkedPhoto: View {
     var stickers = SampleData.stickers
+    var photo: UIImage? = nil
+    var aspect: CGFloat = 279.0 / 372.0
     var scale: CGFloat = 1
     var radius: CGFloat = 16
     var shown = 4
 
     var body: some View {
+        let height = 372 * aspect * scale
         ZStack(alignment: .topLeading) {
-            CoverPhoto(width: 372 * scale, height: 279 * scale)
+            if let photo {
+                Image(uiImage: photo).resizable().frame(width: 372 * scale, height: height)
+            } else {
+                CoverPhoto(width: 372 * scale, height: 279 * scale)
+            }
             ForEach(stickers) { sticker in
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
                     .fill(Color.dsBlue.opacity(0.12))
@@ -55,7 +64,7 @@ struct MarkedPhoto: View {
                     .animation(.easeOut(duration: 0.25).delay(0.1 + 0.12 * Double(sticker.id - 1)), value: shown)
             }
         }
-        .frame(width: 372 * scale, height: 279 * scale, alignment: .topLeading)
+        .frame(width: 372 * scale, height: height, alignment: .topLeading)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
     }
 }
@@ -70,16 +79,42 @@ struct ResultScreen: View {
     /// 여러 장일 때 보고 있는 사진 (12-2)
     @State private var photoTab = 0
 
-    private let stickers = SampleData.stickers
+    private var flow: CaptureFlow { .shared }
+    /// 서버가 처리한 사진들. 비어 있으면(로그인 전 · 다른 화면에서 열 때) 샘플을 보여 줘요.
+    private var live: [CaptureFlow.Job] { flow.results }
+    private var isLive: Bool { !live.isEmpty }
     /// 방금 정리한 사진 수 (앨범에서 여러 장 고르면 2 이상)
-    private var photoCount: Int { router.processedCount }
+    private var photoCount: Int { isLive ? live.count : router.processedCount }
     private var isBatch: Bool { photoCount > 1 }
-    /// 사진마다 카드가 4개씩 (샘플)
-    private var totalCards: Int { stickers.count * photoCount }
-    private var title: String { "판서 \(totalCards)개를 찾았어요" }
-    private func detail(_ tail: String) -> String {
-        isBatch ? "사진 \(photoCount)장 · 11월 17일 10:42 · \(tail)" : "11월 17일 10:42 · \(tail)"
+    /// 사진 한 장의 카드
+    private func stickers(of tab: Int) -> [Sticker] {
+        isLive ? (live.indices.contains(tab) ? live[tab].stickers : []) : SampleData.stickers
     }
+    /// 보고 있는 사진의 카드
+    private var stickers: [Sticker] { stickers(of: photoTab) }
+    private var totalCards: Int { (0..<photoCount).map { stickers(of: $0).count }.reduce(0, +) }
+    private var title: String { totalCards == 0 ? "판서에서 글씨를 찾지 못했어요" : "판서 \(totalCards)개를 찾았어요" }
+    /// 찍은 시각 ("11월 17일 10:42")
+    private var takenText: String {
+        guard isLive, let date = live[0].capture?.takenDate ?? Optional(live[0].takenAt) else { return "11월 17일 10:42" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "M월 d일 HH:mm"
+        return formatter.string(from: date)
+    }
+    private func detail(_ tail: String) -> String {
+        isBatch ? "사진 \(photoCount)장 · \(takenText) · \(tail)" : "\(takenText) · \(tail)"
+    }
+    /// 저장된 곳 ("자료구조 폴더" · "미분류함")
+    private var place: String { isLive ? flow.placeTitle(of: live[0].capture) : "자료구조 폴더" }
+    private var savedText: String { "\(place)에 저장했어요" }
+    /// 왼쪽 위 돌아가기 글자: 과목 이름, 미분류면 "홈"
+    private var backTitle: String {
+        guard isLive else { return "자료구조" }
+        return place.hasSuffix(" 폴더") ? String(place.dropLast(3)) : "홈"
+    }
+    /// 지금 탭의 사진 (서버 결과일 때)
+    private var livePhoto: CaptureFlow.Job? { isLive && live.indices.contains(photoTab) ? live[photoTab] : nil }
     private var copyTitle: String {
         copiedCount != nil ? "복사됨" : isBatch ? "\(totalCards)개 모두 복사" : "모두 복사"
     }
@@ -91,7 +126,7 @@ struct ResultScreen: View {
                 ForEach(0..<photoCount, id: \.self) { index in
                     let on = photoTab == index
                     Button { withAnimation(.easeInOut(duration: 0.15)) { photoTab = index } } label: {
-                        Text("사진 \(index + 1) · 카드 \(stickers.count)").ds(14, .bold, on ? .white : .black)
+                        Text("사진 \(index + 1) · 카드 \(stickers(of: index).count)").ds(14, .bold, on ? .white : .black)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
                             .background(on ? Color.black : Color.black.opacity(0.05), in: Capsule())
@@ -112,10 +147,21 @@ struct ResultScreen: View {
             }
         }
         // 피그마 타임라인: 자리 표시는 0.1초부터, 카드는 0.3초부터 0.12초 간격으로 나타나요.
-        .onAppear { shown = 4 }
-        .fullScreenCover(isPresented: $showOriginal) { OriginalPhotoView() }
-        // 다른 곳(옮기지 않은 판서 목록 등)에서 결과를 열 때는 한 장으로 보여 줘요.
-        .onDisappear { if !router.stack.contains(.result) { router.processedCount = 1 } }
+        .onAppear { shown = 999 }
+        .fullScreenCover(isPresented: $showOriginal) { OriginalPhotoView(image: livePhoto?.image) }
+        // 다른 곳(옮기지 않은 판서 목록 등)에서 결과를 열 때는 한 장 · 샘플로 보여 줘요.
+        .onDisappear {
+            if !router.stack.contains(.result) {
+                router.processedCount = 1
+                flow.results = []
+                flow.openedFolder = nil
+            }
+        }
+    }
+
+    /// 뒤로: 과목 폴더에서 열었으면 폴더로, 아니면 메인으로
+    private func goBack() {
+        if flow.openedFolder != nil { router.pop() } else { router.popTo(.home) }
     }
 
     private var originalButton: some View {
@@ -131,7 +177,7 @@ struct ResultScreen: View {
 
     private var wide: some View {
         DesignCanvas {
-            NavBar(backTitle: "자료구조", title: "", onBack: { router.popTo(.home) }) {
+            NavBar(backTitle: backTitle, title: "", onBack: { goBack() }) {
                 originalButton
             }
 
@@ -147,17 +193,27 @@ struct ResultScreen: View {
             }
             let top: CGFloat = isBatch ? 252 : 200
 
-            MarkedPhoto(shown: shown).id(photoTab).at(48, top)
+            // 사진이 세로로 길면 아래 막대에 닿지 않게 줄여요
+            let photoScale = min(1, (DS.height - top - 120) / (372 * (livePhoto?.aspect ?? 279.0 / 372.0)))
+            MarkedPhoto(stickers: stickers, photo: livePhoto?.photo, aspect: livePhoto?.aspect ?? 279.0 / 372.0,
+                        scale: photoScale, shown: shown)
+                .id(photoTab).at(48, top)
 
-            // 카드 (왼쪽 줄 1·3, 오른쪽 줄 2·4)
-            HStack(alignment: .top, spacing: 16) {
-                VStack(spacing: 16) { card(0); card(2) }
-                VStack(spacing: 16) { card(1); card(3) }
+            // 카드 (왼쪽 줄 1·3·5…, 오른쪽 줄 2·4·6…). 많으면 스크롤해요.
+            ScrollView {
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(spacing: 16) { ForEach(Array(stride(from: 0, to: stickers.count, by: 2)), id: \.self) { card($0) } }
+                    VStack(spacing: 16) { ForEach(Array(stride(from: 1, to: stickers.count, by: 2)), id: \.self) { card($0) } }
+                }
+                .padding(.bottom, 16)
             }
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(width: 343 * 2 + 16, height: DS.height - top - 104, alignment: .top)
             .id(photoTab)
             .at(444, top)
 
-            BottomBar(caption: "자료구조 폴더에 저장했어요") {
+            BottomBar(caption: savedText) {
                 PrimaryButton(title: copyTitle, width: 280) { copyAll(thenGuide: true) }
             }
 
@@ -184,10 +240,10 @@ struct ResultScreen: View {
         return VStack(spacing: 0) {
             // 위 막대
             HStack {
-                Button { router.popTo(.home) } label: {
+                Button { goBack() } label: {
                     HStack(spacing: 2) {
                         Image("chevron-back-24")
-                        Text("자료구조").ds(17, .medium)
+                        Text(backTitle).ds(17, .medium)
                     }
                     .contentShape(Rectangle())
                 }
@@ -213,7 +269,8 @@ struct ResultScreen: View {
 
                     if isBatch { photoTabs }
 
-                    MarkedPhoto(scale: photoWidth / 372, shown: shown)
+                    MarkedPhoto(stickers: stickers, photo: livePhoto?.photo, aspect: livePhoto?.aspect ?? 279.0 / 372.0,
+                                scale: photoWidth / 372, shown: shown)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, photoWidth < inner ? 12 : 0)
                         .background(Color.dsPanel)
@@ -221,8 +278,12 @@ struct ResultScreen: View {
 
                     if columns == 2 {
                         HStack(alignment: .top, spacing: 12) {
-                            VStack(spacing: 12) { card(0, width: cardWidth); card(2, width: cardWidth) }
-                            VStack(spacing: 12) { card(1, width: cardWidth); card(3, width: cardWidth) }
+                            VStack(spacing: 12) {
+                                ForEach(Array(stride(from: 0, to: stickers.count, by: 2)), id: \.self) { card($0, width: cardWidth) }
+                            }
+                            VStack(spacing: 12) {
+                                ForEach(Array(stride(from: 1, to: stickers.count, by: 2)), id: \.self) { card($0, width: cardWidth) }
+                            }
                         }
                     } else {
                         VStack(spacing: 12) {
@@ -237,7 +298,7 @@ struct ResultScreen: View {
 
             // 아래 막대
             HStack(spacing: 12) {
-                Text("자료구조 폴더에 저장했어요")
+                Text(savedText)
                     .font(.system(size: 15, weight: .medium))
                     .tracking(-0.15)
                     .foregroundStyle(Color.dsSub)
@@ -264,10 +325,11 @@ struct ResultScreen: View {
     // MARK: 공통 조각
 
     private func card(_ index: Int, width: CGFloat = 343) -> some View {
+        // 카드 상세(14)는 아직 샘플이라, 서버 결과일 때는 열지 않아요.
         StickerCard(sticker: stickers[index], width: width,
-                    onTap: { router.push(.cardDetail) },
+                    onTap: { if !isLive { router.push(.cardDetail) } },
                     onCopy: { copy([stickers[index]]) })
-            .entrance(shown > 0, delay: 0.3 + 0.12 * Double(index), duration: 0.45, y: 20)
+            .entrance(shown > 0, delay: 0.3 + 0.12 * Double(min(index, 8)), duration: 0.45, y: 20)
     }
 
     /// 복사 완료 알림
@@ -304,7 +366,9 @@ struct ResultScreen: View {
     private func copyAll(thenGuide: Bool) {
         guard copiedCount == nil else { return }
         // 여러 장이면 사진 순서대로 모든 카드를 이어 붙여요.
-        copy(Array(repeating: stickers, count: photoCount).flatMap { $0 }, thenGuide: thenGuide)
+        let all = (0..<photoCount).flatMap { stickers(of: $0) }
+        guard !all.isEmpty else { return }
+        copy(all, thenGuide: thenGuide)
     }
 }
 

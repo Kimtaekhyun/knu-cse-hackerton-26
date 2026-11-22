@@ -3,6 +3,8 @@
 //  chalkdrop
 //
 //  10-1~3 처리 중 (판서 펴기 → 글씨 찾기 → 수식 정리)
+//  로그인했으면 사진을 서버에 올리고 처리 상태를 1초마다 확인해 단계를 보여 줘요 (#78).
+//  로그인 전에는 서버 없이 정해진 연출로 보여 줘요 (디자인 확인용).
 //
 
 import SwiftUI
@@ -15,14 +17,24 @@ struct ProcessingScreen: View {
     @State private var phaseStart = Date()   // 지금 단계가 시작된 때
     /// 여러 장일 때 지금 처리 중인 사진 (0부터). 한 장씩 차례로 처리해요 (10-2).
     @State private var current = 0
+    /// 서버가 찾은 카드 (지금 사진 처리가 끝났을 때)
+    @State private var liveCards: [CardDTO] = []
+    /// 반듯하게 편 사진 (지금 사진 처리가 끝났을 때)
+    @State private var rectified: UIImage?
+    /// 서버에 연결하지 못했을 때 문구
+    @State private var errorMessage: String?
 
-    /// 메인 `앨범에서 선택` 으로 고른 사진들. 촬영 화면에서 오면 비어 있어요.
-    private var photos: [UIImage] { router.albumPhotos }
+    private var flow: CaptureFlow { .shared }
+    /// 찍었거나 앨범에서 고른 사진들
+    private var photos: [UIImage] { flow.jobs.map(\.image) }
     private var total: Int { max(1, photos.count) }
     private var isBatch: Bool { photos.count > 1 }
 
     private let titles = ["판서를 반듯하게 펴고 있어요", "글씨와 수식을 찾고 있어요", "수식으로 정리하고 있어요"]
-    private let details = ["기울기와 빛 반사를 지우는 중", "4곳 중 3곳 발견", "찾은 내용을 텍스트와 수식(LaTeX)으로 바꾸는 중"]
+    private var details: [String] {
+        let found = flow.isLive ? "글씨 · 수식 덩어리를 나누는 중" : "4곳 중 3곳 발견"
+        return ["기울기와 빛 반사를 지우는 중", found, "찾은 내용을 텍스트와 수식(LaTeX)으로 바꾸는 중"]
+    }
     private let steps = ["판서 펴기", "글씨 찾기", "수식 정리"]
     private let progress: [CGFloat] = [110, 215, 300]
 
@@ -49,17 +61,31 @@ struct ProcessingScreen: View {
             let t = max(0, context.date.timeIntervalSince(phaseStart))
             Adaptive { canvas(t) } narrow: { narrow($0, t) }
         }
-        .task { await run() }
+        .task { await start() }
+        .alert("판서를 올리지 못했어요", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("다시 시도") { Task { await runLive() } }
+            Button("돌아가기", role: .cancel) { cancel() }
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
+
+    /// 서버 결과일 때 보여 줄 카드 (카드 칸에는 4개까지)
+    private var shownCards: [(title: String, body: String?)] {
+        guard flow.isLive else { return cards }
+        return liveCards.prefix(4).map { ($0.title, $0.content) }
+    }
+    /// 카드가 나와서 사진을 왼쪽으로 옮길지
+    private var showsCards: Bool { phase == 2 && (!flow.isLive || !liveCards.isEmpty) }
 
     private func canvas(_ t: Double) -> some View {
         DesignCanvas {
-            photoBox(t).at(phase == 2 ? 110 : 297, 56)
+            photoBox(t).at(showsCards ? 110 : 297, 56)
 
-            if phase == 2 {
+            if showsCards {
                 // 카드가 0.3초 간격으로 떠올라요
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(Array(cards.enumerated()), id: \.offset) { index, card in
+                    ForEach(Array(shownCards.enumerated()), id: \.offset) { index, card in
                         let start = 0.3 + 0.3 * Double(index)
                         resultCard(title: card.title, body: card.body)
                             .opacity(tween(t, 0, 1, start, start + 0.3))
@@ -130,11 +156,14 @@ struct ProcessingScreen: View {
     private var cancelTitle: String { isBatch ? "나머지 취소" : "취소" }
 
     /// 한 장일 때는 그냥 돌아가고, 여러 장일 때는 끝난 사진까지만 결과로 보여 줘요.
+    /// 서버는 올라간 판서를 계속 처리해요 (나중에 과목 폴더에서 볼 수 있어요).
     private func cancel() {
-        if isBatch && current > 0 {
-            finish(done: current)
+        let done = flow.isLive ? flow.results.count : current
+        if isBatch && done > 0 {
+            finish(done: done)
         } else {
             router.albumPhotos = []
+            flow.jobs = []
             router.pop()
         }
     }
@@ -174,18 +203,32 @@ struct ProcessingScreen: View {
         }
     }
 
+    /// 지금 처리 중인 사진 (찍었거나 앨범에서 고른 것). 없으면 디자인 예시 사진.
+    @ViewBuilder
+    private func shownPhoto(width: CGFloat, height: CGFloat, radius: CGFloat = 0) -> some View {
+        if photos.indices.contains(current) {
+            Image(uiImage: photos[current])
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: width, height: height)
+                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        } else {
+            CoverPhoto(width: width, height: height, radius: radius)
+        }
+    }
+
     private func photoBox(_ t: Double) -> some View {
         ZStack(alignment: .topLeading) {
             Color.black.opacity(0.06)
 
             if phase == 0 {
                 // 기울어진 원본
-                CoverPhoto(width: 520, height: 390, radius: 4)
+                shownPhoto(width: 520, height: 390, radius: 4)
                     .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.dsBlue, lineWidth: 3))
                     .rotationEffect(.degrees(4))
                     .frame(width: 600, height: 450)
             } else {
-                CoverPhoto(width: 600, height: 450)
+                shownPhoto(width: 600, height: 450)
             }
 
             if phase < 2 {
@@ -198,7 +241,10 @@ struct ProcessingScreen: View {
                     .at(0, 225 + tween(t.truncatingRemainder(dividingBy: 3.4), -225, 180, 0, 1.5, .inOut))
             }
 
-            if phase >= 1 {
+            if flow.isLive, phase == 2, let rectified, !liveCards.isEmpty {
+                // 서버 결과: 반듯하게 편 사진 위에 카드 자리
+                liveBoard(rectified)
+            } else if phase >= 1, !flow.isLive {
                 ForEach(Array(regions.prefix(phase == 1 ? 3 : 4).enumerated()), id: \.offset) { index, region in
                     // 글씨 찾기 단계에서는 0.4초 간격으로 하나씩 나타나요
                     let start = 0.15 + 0.4 * Double(index)
@@ -221,6 +267,30 @@ struct ProcessingScreen: View {
         }
         .frame(width: 600, height: 450, alignment: .topLeading)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    /// 반듯하게 편 사진을 600 × 450 칸에 맞춰 넣고, 카드 자리(0~1 좌표)를 그려요
+    private func liveBoard(_ image: UIImage) -> some View {
+        let aspect = image.size.width > 0 ? image.size.height / image.size.width : 0.75
+        let size = aspect > 0.75 ? CGSize(width: 450 / aspect, height: 450) : CGSize(width: 600, height: 600 * aspect)
+        let origin = CGPoint(x: (600 - size.width) / 2, y: (450 - size.height) / 2)
+        return ZStack(alignment: .topLeading) {
+            Color.white
+            Image(uiImage: image).resizable().frame(width: size.width, height: size.height).at(origin.x, origin.y)
+            ForEach(liveCards) { card in
+                let x = origin.x + card.bbox.x * size.width, y = origin.y + card.bbox.y * size.height
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.dsBlue.opacity(0.14))
+                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Color.dsBlue, lineWidth: 2))
+                    .frame(width: card.bbox.w * size.width, height: card.bbox.h * size.height)
+                    .at(x, y)
+                Text("\(card.orderNo)").ds(11, .bold, .white)
+                    .frame(width: 20, height: 20)
+                    .background(Color.dsBlue, in: Circle())
+                    .at(x + 4, y + 4)
+            }
+        }
+        .frame(width: 600, height: 450, alignment: .topLeading)
     }
 
     private func resultCard(title: String, body: String?) -> some View {
@@ -248,9 +318,91 @@ struct ProcessingScreen: View {
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.black.opacity(0.1), lineWidth: 1))
     }
 
-    /// 세 단계를 차례로 보여 주고 결과 화면으로 넘어가요.
+    /// 촬영 · 앨범에서 넘겨준 사진으로 시작해요. 오류 화면의 "다시 처리"는 `flow.jobs` 를 미리 채워 둬요.
+    private func start() async {
+        if !router.albumPhotos.isEmpty {
+            flow.begin(router.albumPhotos)
+            router.albumPhotos = []
+        }
+        if flow.isLive {
+            if flow.destination == nil { await flow.loadDestination() }
+            await runLive()
+        } else {
+            await runDemo()
+        }
+    }
+
+    /// 서버 처리: 사진마다 올리기 → 1초마다 상태 확인 → 끝나면 카드를 잠깐 보여 주고 다음 사진.
+    /// 연결이 끊기면 알림을 띄우고, "다시 시도"하면 지금 사진부터 이어 해요 (같은 id 라 두 번 올라가지 않아요).
+    private func runLive() async {
+        do {
+            for index in current..<flow.jobs.count {
+                if index != current || phase != 0 { show(index: index, phase: 0) }
+                liveCards = []
+                rectified = nil
+
+                var capture: CaptureDTO
+                if let saved = flow.jobs[index].capture, saved.status != .failed {
+                    capture = saved
+                } else {
+                    let job = flow.jobs[index]
+                    capture = try await CaptureAPI.upload(job.image, id: job.id, takenAt: job.takenAt)
+                }
+                flow.jobs[index].capture = capture
+
+                while !capture.status.isFinished {
+                    if capture.status.phase != phase { show(index: index, phase: capture.status.phase) }
+                    try await Task.sleep(for: .seconds(1))
+                    capture = try await CaptureAPI.detail(capture.id)
+                    flow.jobs[index].capture = capture
+                }
+
+                if capture.status == .failed {
+                    // 한 장이면 오류 화면, 여러 장이면 건너뛰고 다음 사진
+                    if flow.jobs.count == 1 {
+                        flow.failed = flow.jobs[index]
+                        router.replace(.captureError)
+                        return
+                    }
+                    continue
+                }
+
+                // 끝: 반듯하게 편 사진 위에 카드 자리 · 카드를 잠깐 보여 줘요
+                let image = try? await CaptureAPI.image(capture.id, rectified: true)
+                flow.jobs[index].rectified = image
+                rectified = image
+                show(index: index, phase: 2)
+                withAnimation(.easeInOut(duration: 0.45)) { liveCards = capture.cards }
+                flow.results.append(flow.jobs[index])
+                try await Task.sleep(for: .seconds(capture.cards.isEmpty ? 0.6 : 1.8))
+            }
+            if flow.results.isEmpty, let first = flow.jobs.first {
+                // 여러 장이 모두 실패했으면 첫 사진으로 오류 화면
+                flow.failed = first
+                router.replace(.captureError)
+            } else {
+                finish(done: flow.results.count)
+            }
+        } catch is CancellationError {
+            // 화면을 벗어나면 그대로 멈춰요.
+        } catch APIError.unauthorized {
+            // 로그인 화면으로 가요 (`ContentView`)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func show(index: Int, phase newPhase: Int) {
+        phaseStart = Date()
+        withAnimation(.easeInOut(duration: 0.45)) {
+            current = index
+            phase = newPhase
+        }
+    }
+
+    /// 세 단계를 차례로 보여 주고 결과 화면으로 넘어가요. (로그인 전 연출)
     /// 여러 장이면 사진마다 되풀이해요. 두 번째 사진부터는 조금 빨리 넘어가요.
-    private func run() async {
+    private func runDemo() async {
         do {
             for index in 0..<total {
                 let fast = index > 0
@@ -279,15 +431,15 @@ extension ProcessingScreen {
     func narrow(_ size: CGSize, _ t: Double) -> some View {
         let inner = size.width - 40
         // 카드가 나오는 마지막 단계에서는 사진을 줄여 자리를 내줘요.
-        let photoWidth = min(inner, 600) * (phase == 2 ? 0.62 : 1)
+        let photoWidth = min(inner, 600) * (showsCards ? 0.62 : 1)
         return VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 20) {
                     photoBox(t).scaledBox(600, 450, to: photoWidth)
 
-                    if phase == 2 {
+                    if showsCards {
                         VStack(alignment: .leading, spacing: 10) {
-                            ForEach(Array(cards.enumerated()), id: \.offset) { index, card in
+                            ForEach(Array(shownCards.enumerated()), id: \.offset) { index, card in
                                 let start = 0.3 + 0.3 * Double(index)
                                 resultCard(title: card.title, body: card.body)
                                     .opacity(tween(t, 0, 1, start, start + 0.3))

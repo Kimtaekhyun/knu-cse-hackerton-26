@@ -22,6 +22,9 @@ from app.schemas.timetable import Slot, Subject
 from app.services import llm
 
 SNAP_MINUTES = 30  # 칸 위치로 시간을 읽어 몇 분씩 어긋나므로 30분 단위로 맞춘다
+# 하루의 마지막 분(23:59). 30분 반올림으로 23:45 이후가 24:00이 되는데,
+# 저장 API(DB time 형식)는 24:00을 받지 못하므로 끝 시각을 여기에 맞춘다
+LAST_MINUTE = 24 * 60 - 1
 TIME_PATTERN = re.compile(r"^(\d{1,2}):(\d{2})$")
 
 
@@ -77,6 +80,7 @@ def normalize(raw: RawTimetable) -> list[Subject]:
 
     읽을 수 없는 시각, 0~6 밖의 요일, 시작 ≥ 끝인 칸은 그 칸만 버리고 과목은 남긴다
     (06 화면에서 직접 고칠 수 있게). 시간 있는 과목은 첫 수업 순, 시간 없는 과목은 그 뒤에 둔다.
+    반올림으로 24:00이 된 끝 시각은 23:59로 맞추고, 24:00에 시작하는 칸은 시작 ≥ 끝이 되어 버린다.
     """
     grouped: dict[str, list[tuple[int, int, int]]] = {}
     for block in raw.blocks:
@@ -85,6 +89,8 @@ def normalize(raw: RawTimetable) -> list[Subject]:
             continue
         slots = grouped.setdefault(name, [])
         start, end = to_minutes(block.start), to_minutes(block.end)
+        if end is not None:
+            end = min(end, LAST_MINUTE)
         if start is None or end is None or not 0 <= block.weekday <= 6 or start >= end:
             continue
         slots.append((block.weekday, start, end))

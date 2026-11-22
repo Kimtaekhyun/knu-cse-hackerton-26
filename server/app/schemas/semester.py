@@ -89,3 +89,21 @@ class TimetableSave(BaseModel):
     """시간표 확인 화면의 "이대로 저장". 이 목록이 그 학기 과목 전체가 된다"""
 
     subjects: list[SubjectIn] = Field(max_length=MAX_SUBJECTS)
+
+
+class TermTimetableSave(TimetableSave):
+    """학기를 골라서 "이대로 저장" (가입 후 첫 등록 · 새 학기 추가). 학기가 없으면 만든다"""
+
+    year: int = Field(ge=2000, le=2100)
+    term: SemesterTerm
+    # 저장하면서 현재 학기로 지정할지. 지난 학기를 추가할 때는 false
+    make_current: bool = True
+
+
+class SuggestedSemester(BaseModel):
+    """오늘 날짜 기준 기본 학기 (앱 학기 선택 휠의 처음 값)"""
+
+    year: int
+    term: SemesterTerm
+    # "2026년 2학기"
+    label: str

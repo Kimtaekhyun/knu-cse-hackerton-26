@@ -27,10 +27,12 @@ enum APIError: LocalizedError {
     case invalidResponse
     /// 로그인 토큰이 만료되거나 무효예요 (다시 로그인해야 해요)
     case unauthorized
+    /// 서버가 404 로 답했어요 (예: 아직 현재 학기가 없음)
+    case notFound(String)
 
     var errorDescription: String? {
         switch self {
-        case .server(let message): message
+        case .server(let message), .notFound(let message): message
         case .unauthorized: "로그인이 만료됐어요. 다시 로그인해 주세요."
         case .unreachable: "서버에 연결할 수 없어요. 서버가 켜져 있는지 확인해 주세요."
         case .invalidResponse: "서버 응답을 읽지 못했어요."
@@ -45,11 +47,20 @@ enum APIClient {
     static let timeout: TimeInterval = 180
 
     /// 이미지 한 장을 multipart(`image` 칸)로 올리고 JSON 답을 `type` 으로 읽어요.
-    static func uploadImage<T: Decodable>(path: String, image: UIImage, as type: T.Type) async throws -> T {
-        guard let jpeg = resized(image).jpegData(compressionQuality: 0.9) else { throw APIError.invalidResponse }
+    /// `fields` 는 함께 보낼 글자 칸 (판서의 `id` · `taken_at` 등), `maxSide` 는 줄일 긴 변 길이예요.
+    static func uploadImage<T: Decodable>(path: String, image: UIImage, fields: [String: String] = [:],
+                                          maxSide: CGFloat = maxImageSide, as type: T.Type) async throws -> T {
+        guard let jpeg = resized(image, maxSide: maxSide).jpegData(compressionQuality: 0.9) else {
+            throw APIError.invalidResponse
+        }
 
         let boundary = "Boundary-\(UUID().uuidString)"
         var body = Data()
+        for (name, value) in fields.sorted(by: { $0.key < $1.key }) {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(value)\r\n".data(using: .utf8)!)
+        }
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"image\"; filename=\"upload.jpg\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
@@ -81,9 +92,30 @@ enum APIClient {
         return try await send(request, as: type)
     }
 
-    /// 로그인 토큰을 붙여 보내고 답을 읽어요.
-    /// 토큰을 붙여 보낸 요청이 401이면 토큰이 만료 · 무효라서 로그아웃 처리하고 `.unauthorized` 를 던져요.
+    /// 답을 JSON 으로 읽지 않고 그대로 받아요 (사진 받기 · 204 빈 답 등).
+    @discardableResult
+    static func raw(_ method: String, path: String, query: [URLQueryItem] = [],
+                    timeout: TimeInterval = 30) async throws -> Data {
+        var url = APIConfig.baseURL.appending(path: path)
+        if !query.isEmpty { url.append(queryItems: query) }
+        var request = URLRequest(url: url, timeoutInterval: timeout)
+        request.httpMethod = method
+        return try await data(for: request)
+    }
+
+    /// 로그인 토큰을 붙여 보내고 답을 `type` 으로 읽어요.
     private static func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
+        let data = try await data(for: request)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw APIError.invalidResponse
+        }
+    }
+
+    /// 로그인 토큰을 붙여 보내고 답 본문을 받아요.
+    /// 토큰을 붙여 보낸 요청이 401이면 토큰이 만료 · 무효라서 로그아웃 처리하고 `.unauthorized` 를 던져요.
+    private static func data(for request: URLRequest) async throws -> Data {
         var request = request
         let token = AuthSession.shared.accessToken
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
@@ -103,22 +135,19 @@ enum APIClient {
                 throw APIError.unauthorized
             }
             if let failure = try? JSONDecoder().decode(ServerFailure.self, from: data) {
+                if http.statusCode == 404 { throw APIError.notFound(failure.detail) }
                 throw APIError.server(failure.detail)
             }
             throw APIError.invalidResponse
         }
-        do {
-            return try JSONDecoder().decode(T.self, from: data)
-        } catch {
-            throw APIError.invalidResponse
-        }
+        return data
     }
 
-    /// 긴 변이 `maxImageSide` 를 넘으면 비율을 지켜 줄여요.
-    private static func resized(_ image: UIImage) -> UIImage {
+    /// 긴 변이 `maxSide` 를 넘으면 비율을 지켜 줄여요.
+    private static func resized(_ image: UIImage, maxSide: CGFloat) -> UIImage {
         let longest = max(image.size.width, image.size.height)
-        guard longest > maxImageSide else { return image }
-        let scale = maxImageSide / longest
+        guard longest > maxSide else { return image }
+        let scale = maxSide / longest
         let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1

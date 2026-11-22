@@ -30,6 +30,7 @@ struct HomeScreen: View {
             Adaptive { canvas(t) } narrow: { narrow($0, t) }
         }
             .onAppear { appeared = true }
+            .task { await SemesterStore.shared.reload() }
             .overlay {
                 if picked.count > 1 {
                     AlbumReviewSheet(photos: $picked,
@@ -261,7 +262,7 @@ struct HomeScreen: View {
     private var rightColumn: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("2026년 2학기").ds(20, .bold)
+                Text(semesterLabel).ds(20, .bold)
                 Spacer()
                 Button { router.push(.allSemesters) } label: {
                     HStack(spacing: 2) {
@@ -274,39 +275,78 @@ struct HomeScreen: View {
             }
             .frame(width: 746)
 
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 19) {
-                    SubjectCard(name: "자료구조", detail: "월 10:30–12:00", count: counts[0], style: .blue) {
-                        router.push(isFirst ? .subjectEmpty : .subjectLessons)
+            // 과목 폴더 (3칸씩, 두 줄을 넘으면 스크롤)
+            ScrollView(showsIndicators: false) {
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(236), spacing: 19), count: 3),
+                          alignment: .leading, spacing: 16) {
+                    ForEach(Array(folders.enumerated()), id: \.offset) { index, folder in
+                        folderCard(folder)
+                            .entrance(appeared, delay: 0.10 + 0.07 * Double(min(index, 6)), duration: 0.4, y: 16)
                     }
-                    .entrance(appeared, delay: 0.10, duration: 0.4, y: 16)
-                    SubjectCard(name: "컴퓨터구조", detail: "화 13:00–14:30", count: counts[1]) {
-                        router.push(isFirst ? .subjectEmpty : .subjectLessons)
-                    }
-                    .entrance(appeared, delay: 0.17, duration: 0.4, y: 16)
-                    SubjectCard(name: "확률과 통계", detail: "수 09:00–10:30", count: counts[2]) {
-                        router.push(isFirst ? .subjectEmpty : .subjectLessons)
-                    }
-                    .entrance(appeared, delay: 0.24, duration: 0.4, y: 16)
-                }
-                HStack(spacing: 19) {
-                    SubjectCard(name: "이산수학", detail: "목 15:00–16:30", count: counts[3]) {
-                        router.push(isFirst ? .subjectEmpty : .subjectLessons)
-                    }
-                    .entrance(appeared, delay: 0.31, duration: 0.4, y: 16)
-                    SubjectCard(name: "운영체제", detail: "금 10:30–12:00", count: counts[4]) {
-                        router.push(.subjectEmpty)
-                    }
-                    .entrance(appeared, delay: 0.38, duration: 0.4, y: 16)
-                    SubjectCard(name: "미분류함", detail: "시간표 밖에서 찍은 판서", count: counts[5], style: .dashed) {
-                        router.push(.unsorted)
-                    }
-                    .entrance(appeared, delay: 0.45, duration: 0.4, y: 16)
                 }
             }
+            .frame(width: 746, height: 166 * 2 + 16)
+            .scrollBounceBehavior(.basedOnSize)
 
             weekChart
         }
+    }
+
+    // MARK: 과목 폴더 데이터
+
+    /// 메인의 폴더 한 칸
+    struct Folder {
+        var name: String
+        var detail: String
+        var count: Int
+        var style: SubjectCard.Style = .gray
+        var symbol: String? = nil
+        var open: () -> Void
+    }
+
+    private var store: SemesterStore { SemesterStore.shared }
+
+    private var semesterLabel: String {
+        if store.isLive { return store.current?.label ?? "아직 등록한 학기가 없어요" }
+        return "2026년 2학기"
+    }
+
+    /// 로그인했으면 서버의 현재 학기 과목, 아니면 샘플 폴더
+    private var folders: [Folder] {
+        let unsorted = Folder(name: "미분류함", detail: "시간표 밖에서 찍은 판서",
+                              count: store.isLive ? 0 : counts[5], style: .dashed) { router.push(.unsorted) }
+        guard store.isLive else {
+            let samples: [(String, String, Screen)] = [
+                ("자료구조", "월 10:30–12:00", isFirst ? .subjectEmpty : .subjectLessons),
+                ("컴퓨터구조", "화 13:00–14:30", isFirst ? .subjectEmpty : .subjectLessons),
+                ("확률과 통계", "수 09:00–10:30", isFirst ? .subjectEmpty : .subjectLessons),
+                ("이산수학", "목 15:00–16:30", isFirst ? .subjectEmpty : .subjectLessons),
+                ("운영체제", "금 10:30–12:00", .subjectEmpty),
+            ]
+            return samples.enumerated().map { index, sample in
+                Folder(name: sample.0, detail: sample.1, count: counts[index], style: index == 0 ? .blue : .gray) {
+                    router.subject = nil
+                    router.push(sample.2)
+                }
+            } + [unsorted]
+        }
+        guard store.current != nil else {
+            return [Folder(name: "시간표 등록", detail: "에브리타임 시간표 올리기", count: 0, style: .dashed, symbol: "+") {
+                router.push(.timetableUpload)
+            }, unsorted]
+        }
+        return store.subjects.enumerated().map { index, subject in
+            Folder(name: subject.name, detail: subject.timeText, count: subject.captureCount,
+                   style: index == 0 ? .blue : .gray) {
+                router.subject = subject
+                router.push(subject.captureCount == 0 ? .subjectEmpty : .subjectLessons)
+            }
+        } + [unsorted]
+    }
+
+    private func folderCard(_ folder: Folder) -> some View {
+        SubjectCard(name: folder.name, detail: folder.detail, count: folder.count,
+                    style: folder.style, symbol: folder.symbol, action: folder.open)
     }
 
     // MARK: 이번 주
@@ -355,14 +395,6 @@ extension HomeScreen {
         // 반쪽 폭이면 폴더 3칸, 더 좁으면 2칸
         let folderColumns = inner >= 500 ? 3 : 2
         let cardWidth = (inner - 12 * CGFloat(folderColumns - 1)) / CGFloat(folderColumns)
-        let folders: [(name: String, detail: String, style: SubjectCard.Style, to: Screen)] = [
-            ("자료구조", "월 10:30–12:00", .blue, isFirst ? .subjectEmpty : .subjectLessons),
-            ("컴퓨터구조", "화 13:00–14:30", .gray, isFirst ? .subjectEmpty : .subjectLessons),
-            ("확률과 통계", "수 09:00–10:30", .gray, isFirst ? .subjectEmpty : .subjectLessons),
-            ("이산수학", "목 15:00–16:30", .gray, isFirst ? .subjectEmpty : .subjectLessons),
-            ("운영체제", "금 10:30–12:00", .gray, .subjectEmpty),
-            ("미분류함", "시간표 밖에서 찍은 판서", .dashed, .unsorted),
-        ]
         // 안내 말풍선 움직임 (07)
         let bob = t < 0.7 ? tween(t, 0, -8, 0, 0.7, .inOut)
             : t < 1.4 ? tween(t, -8, 0, 0.7, 1.4, .inOut)
@@ -403,7 +435,7 @@ extension HomeScreen {
                     // 과목 폴더
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
-                            Text("2026년 2학기").ds(20, .bold)
+                            Text(semesterLabel).ds(20, .bold)
                             Spacer()
                             Button { router.push(.allSemesters) } label: {
                                 HStack(spacing: 2) {
@@ -414,12 +446,12 @@ extension HomeScreen {
                             }
                             .buttonStyle(.plain)
                         }
-                        NarrowGrid(count: folders.count, columns: folderColumns) { index in
-                            let folder = folders[index]
-                            SubjectCard(name: folder.name, detail: folder.detail, count: counts[index], style: folder.style) {
-                                router.push(folder.to)
-                            }
-                            .scaledBox(236, 166, to: cardWidth)
+                        // 폴더 목록은 서버 응답에 따라 개수가 바뀌어요. 한 번만 꺼내 개수와 내용을 같은 값으로 써요
+                        // (따로 읽으면 이전 개수로 만든 칸이 줄어든 목록을 읽어 범위 초과로 멈춰요, #87).
+                        let items = folders
+                        NarrowGrid(count: items.count, columns: folderColumns) { index in
+                            folderCard(items[index])
+                                .scaledBox(236, 166, to: cardWidth)
                             .entrance(appeared, delay: 0.1 + 0.07 * Double(index), duration: 0.4, y: 16)
                         }
                     }

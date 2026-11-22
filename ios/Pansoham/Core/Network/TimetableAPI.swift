@@ -8,7 +8,7 @@
 import SwiftUI
 
 enum TimetableAPI {
-    struct SlotDTO: Decodable, Equatable {
+    struct SlotDTO: Codable, Hashable {
         /// 0=월 … 6=일
         let weekday: Int
         /// "HH:MM"

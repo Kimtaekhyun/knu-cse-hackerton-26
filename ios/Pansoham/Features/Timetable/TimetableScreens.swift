@@ -144,6 +144,9 @@ struct TimetableConfirmScreen: View {
     @State private var showEditor = false
     /// 원본 사진 크게 보기
     @State private var showOriginal = false
+    /// `이대로 저장` 서버 요청 중
+    @State private var saving = false
+    @State private var saveError: String?
     /// 학기 고르기 창
     @State private var showSemesterPicker = false
 
@@ -178,6 +181,11 @@ struct TimetableConfirmScreen: View {
                 }
             }
             .fullScreenCover(isPresented: $showOriginal) { OriginalPhotoView(image: router.timetableImage) }
+            .alert("저장하지 못했어요", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(saveError ?? "")
+            }
             .sheet(isPresented: $showSemesterPicker) {
                 SemesterPickerSheet(semester: semester) { router.semester = $0 }
             }
@@ -207,8 +215,8 @@ struct TimetableConfirmScreen: View {
                 .at(491, 210)
 
             BottomBar(caption: caption) {
-                PrimaryButton(title: "이대로 저장", width: 280, enabled: load == .loaded) {
-                    router.reset(to: .homeFirst)
+                PrimaryButton(title: saving ? "저장 중…" : "이대로 저장", width: 280, enabled: load == .loaded && !saving) {
+                    save()
                 }
             }
         }
@@ -326,15 +334,25 @@ struct TimetableConfirmScreen: View {
     }
 
     /// 05 에서 고른 캡처를 서버로 보내 과목 목록을 채워요.
-    /// 캡처가 없으면(개발용 `-startScreen timetableConfirm`) 샘플 과목을 보여 줘요.
+    /// 캡처 없이 열면(내 계정 › 시간표 수정) 서버의 현재 학기 과목을, 그것도 없으면 샘플 과목을 보여 줘요.
     private func analyze() async {
+        // 학기 선택 처음 값: 오늘 날짜 기준 (서버 규칙). 시간표 수정이면 아래에서 저장된 학기로 바꿔요.
+        if router.semester == nil, router.timetableImage != nil || isManual {
+            router.semester = await SemesterAPI.suggested()
+        }
         // 직접 등록: 빈 목록에서 과목 추가로 채워요
         if isManual {
             load = .loaded
             return
         }
         guard let image = router.timetableImage else {
-            subjects = SampleData.timetable
+            let store = SemesterStore.shared
+            await store.reload()
+            subjects = store.current.map { $0.subjects?.map(\.timetableSubject) ?? [] } ?? SampleData.timetable
+            // 시간표 수정: 저장된 현재 학기를 학기 버튼에 미리 넣어 둬요
+            if router.semester == nil {
+                if let saved = store.current?.semester { router.semester = saved } else { router.semester = await SemesterAPI.suggested() }
+            }
             load = .loaded
             return
         }
@@ -373,6 +391,29 @@ struct TimetableConfirmScreen: View {
             }
             .padding(.vertical, 20)
             .frame(width: width, alignment: .leading)
+        }
+    }
+
+    /// `이대로 저장`. 로그인했으면 서버에 학기 · 과목을 저장하고 메인으로, 아니면 화면만 넘겨요.
+    private func save() {
+        guard AuthSession.shared.isLoggedIn else {
+            router.reset(to: .homeFirst)
+            return
+        }
+        saving = true
+        Task {
+            defer { saving = false }
+            do {
+                // 지금 현재 학기보다 앞선 학기(새 학기 추가로 지난 학기를 넣을 때)면 현재 학기는 그대로 둬요.
+                let current = SemesterStore.shared.current?.semester
+                let makeCurrent = current.map { semester.order >= $0.order } ?? true
+                let saved = try await SemesterAPI.saveTimetable(subjects, semester: semester, makeCurrent: makeCurrent)
+                if makeCurrent { SemesterStore.shared.use(saved) } else { await SemesterStore.shared.reload() }
+                router.timetableImage = nil
+                router.reset(to: .home)
+            } catch {
+                saveError = error.localizedDescription
+            }
         }
     }
 
@@ -529,8 +570,8 @@ extension TimetableConfirmScreen {
                     .at(48, 632)
 
                 PortraitBottomBar(caption: caption) {
-                    PrimaryButton(title: "이대로 저장", width: 280, enabled: load == .loaded) {
-                        router.reset(to: .homeFirst)
+                    PrimaryButton(title: saving ? "저장 중…" : "이대로 저장", width: 280, enabled: load == .loaded && !saving) {
+                        save()
                     }
                 }
                 .at(0, 1090)
@@ -596,7 +637,7 @@ extension TimetableConfirmScreen {
             }
         }, bottom: {
             NarrowBottomBar(caption: caption) {
-                PrimaryButton(title: "이대로 저장", width: inner < 440 ? 150 : 200, enabled: load == .loaded) { router.reset(to: .homeFirst) }
+                PrimaryButton(title: saving ? "저장 중…" : "이대로 저장", width: inner < 440 ? 150 : 200, enabled: load == .loaded && !saving) { save() }
             }
         })
     }
