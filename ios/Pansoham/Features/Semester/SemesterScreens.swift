@@ -119,6 +119,10 @@ struct PastSemesterScreen: View {
     /// 서버에서 받은 학기. nil 이면 샘플
     @State private var live: SemesterAPI.SemesterDTO?
     @State private var switching = false
+    /// 학기 삭제 확인 창 · 삭제 중 · 실패 (#93)
+    @State private var confirmDelete = false
+    @State private var deleting = false
+    @State private var deleteError: String?
 
     private var subjects: [(name: String, time: String, count: Int, dto: SemesterAPI.SubjectDTO?)] {
         if let live {
@@ -141,6 +145,29 @@ struct PastSemesterScreen: View {
                 guard AuthSession.shared.isLoggedIn, let id = router.pastSemesterID else { return }
                 live = try? await SemesterAPI.detail(id)
             }
+            .alert("\(title)를 삭제할까요?", isPresented: $confirmDelete) {
+                Button("취소", role: .cancel) {}
+                Button("삭제", role: .destructive) { deleteSemester() }
+            } message: {
+                Text("과목 \(live?.subjectCount ?? 0)개 · 판서 \(live?.captureCount ?? 0)장이 모두 지워져요.")
+            }
+            .deleteFailedAlert($deleteError)
+    }
+
+    /// 지난 학기 지우기 → 전체 학기(21)로 (#93). 현재 학기는 버튼이 없어요.
+    private func deleteSemester() {
+        guard let live, !live.isCurrent else { return }
+        deleting = true
+        Task {
+            defer { deleting = false }
+            do {
+                try await SemesterAPI.delete(live.id)
+                await SemesterStore.shared.reload()
+                router.pop()
+            } catch {
+                deleteError = error.localizedDescription
+            }
+        }
     }
 
     /// 과목 폴더 열기
@@ -153,10 +180,18 @@ struct PastSemesterScreen: View {
         router.push(subject.dto?.captureCount == 0 ? .subjectEmpty : .subjectLessons)
     }
 
-    /// 오른쪽 위: 서버 학기면 `현재 학기로`, 샘플이면 `시간표 보기`
+    /// 오른쪽 위: 서버 학기면 `학기 삭제` · `현재 학기로`, 샘플이면 `시간표 보기`
     @ViewBuilder
     func trailingAction(_ size: CGFloat) -> some View {
         if let live {
+            HStack(spacing: 24) {
+            if !live.isCurrent {
+                Button { confirmDelete = true } label: {
+                    Text(deleting ? "삭제하는 중…" : "학기 삭제").ds(size, .medium, .dsSub)
+                }
+                .buttonStyle(.plain)
+                .disabled(deleting || switching)
+            }
             Button {
                 switching = true
                 Task {
@@ -169,7 +204,8 @@ struct PastSemesterScreen: View {
                 Text(switching ? "바꾸는 중…" : "현재 학기로").ds(size, .bold, .dsBlue)
             }
             .buttonStyle(.plain)
-            .disabled(switching)
+            .disabled(switching || deleting)
+            }
         } else {
             Text("시간표 보기").ds(size, .medium, .dsSub)
         }

@@ -89,6 +89,17 @@ final class SubjectCaptures {
     /// 옮긴 판서를 목록에서 바로 빼요 (서버는 이미 반영됨)
     func remove(_ id: UUID) { items.removeAll { $0.id == id } }
 
+    /// 판서 지우기 (#93). 서버에서 지운 뒤 과목 폴더 · 미분류함 · 옮기지 않은 판서 목록에서 모두 빼요.
+    @MainActor
+    static func delete(_ ids: [UUID]) async throws {
+        for id in ids {
+            try await CaptureAPI.delete(id)
+            for store in [shared, unsorted, unmoved] { store.remove(id) }
+        }
+        // 메인 폴더 판서 수
+        await SemesterStore.shared.reload()
+    }
+
     /// 최신 판서부터
     var latest: [Item] { items.sorted { $0.capture.takenAt > $1.capture.takenAt } }
 

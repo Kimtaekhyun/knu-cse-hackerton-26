@@ -78,6 +78,10 @@ struct ResultScreen: View {
     @State private var showOriginal = false
     /// 여러 장일 때 보고 있는 사진 (12-2)
     @State private var photoTab = 0
+    /// 판서 삭제 확인 창 · 삭제 중 · 실패 (#93)
+    @State private var confirmDelete = false
+    @State private var deleting = false
+    @State private var deleteError: String?
 
     private var flow: CaptureFlow { .shared }
     /// 서버가 처리한 사진들. 비어 있으면(로그인 전 · 다른 화면에서 열 때) 샘플을 보여 줘요.
@@ -149,12 +153,52 @@ struct ResultScreen: View {
         // 피그마 타임라인: 자리 표시는 0.1초부터, 카드는 0.3초부터 0.12초 간격으로 나타나요.
         .onAppear { shown = 999 }
         .fullScreenCover(isPresented: $showOriginal) { OriginalPhotoView(image: livePhoto?.image) }
+        .alert(deleteTitle, isPresented: $confirmDelete) {
+            Button("취소", role: .cancel) {}
+            Button("삭제", role: .destructive) { deletePhoto() }
+        } message: {
+            Text("\(isBatch ? "이 사진의 " : "")카드 \(stickers.count)개도 함께 지워지고 되돌릴 수 없어요.")
+        }
+        .deleteFailedAlert($deleteError)
         // 다른 곳(옮기지 않은 판서 목록 등)에서 결과를 열 때는 한 장 · 샘플로 보여 줘요.
         .onDisappear {
             if !router.stack.contains(.result) {
                 router.processedCount = 1
                 flow.results = []
                 flow.openedFolder = nil
+            }
+        }
+    }
+
+    /// 사진 아래 삭제 버튼: 한 장이면 "이 판서 삭제", 여러 장이면 보고 있는 "사진 N 삭제"
+    private var deleteLabel: String { isBatch ? "사진 \(photoTab + 1) 삭제" : "이 판서 삭제" }
+    private var deleteTitle: String { isBatch ? "사진 \(photoTab + 1)을 삭제할까요?" : "판서를 삭제할까요?" }
+    private var deleteButton: some View {
+        DeleteButton(title: deleteLabel, busy: deleting) { confirmDelete = true }
+    }
+
+    /// 보고 있는 판서(사진) 한 장 지우기. 남은 사진이 없으면 이전 화면으로 (#93)
+    private func deletePhoto() {
+        guard let job = livePhoto else {
+            // 샘플: 서버 없이 화면만 닫아요
+            goBack()
+            return
+        }
+        deleting = true
+        Task {
+            defer { deleting = false }
+            do {
+                try await SubjectCaptures.delete([job.id])
+                if flow.results.count <= 1 {
+                    goBack()
+                } else {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        flow.results.removeAll { $0.id == job.id }
+                        photoTab = min(photoTab, flow.results.count - 1)
+                    }
+                }
+            } catch {
+                deleteError = error.localizedDescription
             }
         }
     }
@@ -198,6 +242,10 @@ struct ResultScreen: View {
             MarkedPhoto(stickers: stickers, photo: livePhoto?.photo, aspect: livePhoto?.aspect ?? 279.0 / 372.0,
                         scale: photoScale, shown: shown)
                 .id(photoTab).at(48, top)
+
+            // 사진 아래 판서 삭제 (12-3 · 12-5)
+            deleteButton
+                .at(48, top + 372 * (livePhoto?.aspect ?? 279.0 / 372.0) * photoScale + 16)
 
             // 카드 (왼쪽 줄 1·3·5…, 오른쪽 줄 2·4·6…). 많으면 스크롤해요.
             ScrollView {
@@ -275,6 +323,8 @@ struct ResultScreen: View {
                         .padding(.vertical, photoWidth < inner ? 12 : 0)
                         .background(Color.dsPanel)
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                    deleteButton
 
                     if columns == 2 {
                         HStack(alignment: .top, spacing: 12) {
