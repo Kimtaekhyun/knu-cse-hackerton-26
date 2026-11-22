@@ -13,6 +13,8 @@ from app.schemas.semester import (
     SemesterOut,
     SubjectIn,
     SubjectOut,
+    SuggestedSemester,
+    TermTimetableSave,
     TimetableSave,
 )
 from app.services import semesters as service
@@ -38,7 +40,31 @@ def create_semester(body: SemesterCreate, db: DbDep, user: WriteUserDep):
     return service.semester_detail(db, service.get_semester(db, user, semester.id))
 
 
-# /{semester_id}보다 먼저 둬야 "current"가 id로 읽히지 않는다
+# 아래 세 경로(/suggested · /timetable · /current)는 /{semester_id}보다 먼저 둬야 id로 읽히지 않는다
+@router.get("/suggested", response_model=SuggestedSemester)
+def suggested(user: UserDep):
+    """오늘 날짜 기준 기본 학기. 앱 학기 선택 휠의 처음 값으로 쓴다
+
+    3~6월 1학기 · 7~8월 여름학기 · 9~12월 2학기 · 1~2월 지난해 겨울학기 (판서 자동 분류와 같은 규칙)
+    """
+    year, term = service.term_of(service.today())
+    return SuggestedSemester(year=year, term=term, label=service.label(year, term))
+
+
+@router.put("/timetable", response_model=SemesterDetail)
+def save_term_timetable(body: TermTimetableSave, db: DbDep, user: WriteUserDep):
+    """고른 학기로 "이대로 저장" (가입 후 첫 등록 · 새 학기 추가). 학기가 없으면 만든다
+
+    학기 만들기 · 현재 학기 지정 · 과목 저장을 한 번에 해서, 중간에 실패해도 빈 학기가 남지 않고
+    같은 요청을 다시 보내도 학기가 두 개 생기지 않는다. 과목 저장 규칙은 학기 id로 저장할 때와 같다.
+    """
+    semester = service.save_timetable_for_term(
+        db, user, body.year, body.term, body.subjects, body.make_current
+    )
+    db.commit()
+    return service.semester_detail(db, service.get_semester(db, user, semester.id))
+
+
 @router.get("/current", response_model=SemesterDetail)
 def get_current(db: DbDep, user: UserDep):
     """현재 학기와 과목 · 시간표. 없으면 404 (앱은 시간표 등록 화면으로)"""

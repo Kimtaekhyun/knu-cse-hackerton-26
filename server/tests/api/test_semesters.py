@@ -49,7 +49,7 @@ def test_duplicate_semester_is_409(client, auth):
     create(client, auth)
     response = create(client, auth)
     assert response.status_code == 409
-    assert response.json()["detail"] == "2026년 2학기은 이미 있어요."
+    assert response.json()["detail"] == "2026년 2학기는 이미 있어요."
 
 
 def test_invalid_term_is_422(client, auth):
