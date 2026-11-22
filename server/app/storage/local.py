@@ -47,6 +47,11 @@ def exists(key: str) -> bool:
     return path(key).is_file()
 
 
+def delete(key: str) -> None:
+    """파일 하나를 지운다 (카드 하나의 스티커 PNG). 없으면 그냥 넘어간다"""
+    path(key).unlink(missing_ok=True)
+
+
 def delete_tree(prefix: str) -> None:
     """폴더째 지운다 (판서 하나의 원본 · 보정본 · 카드 조각). 없으면 그냥 넘어간다"""
     shutil.rmtree(path(prefix), ignore_errors=True)
