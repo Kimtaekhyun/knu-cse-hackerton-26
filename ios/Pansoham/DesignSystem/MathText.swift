@@ -67,6 +67,21 @@ struct MathText: View {
     }
 }
 
+extension MathText {
+    /// 글자를 화면에 보이는 모양 그대로 그림으로 그려요 (배경 투명, 3배).
+    /// 굿노트는 LaTeX를 그리지 못해서, 끌어다 놓기 · 복사할 때 이 그림을 넘겨요. 실패하면 nil.
+    @MainActor
+    static func image(_ text: String, width: CGFloat, size: CGFloat = 20) -> UIImage? {
+        let renderer = ImageRenderer(content:
+            MathText(text: text, size: size, weight: .medium, lineGap: size * 1.45 - 24)
+                .frame(width: width, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        )
+        renderer.scale = 3
+        return renderer.uiImage
+    }
+}
+
 // MARK: - 줄 나누기
 
 enum MathLine {
