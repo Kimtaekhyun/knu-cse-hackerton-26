@@ -1,4 +1,7 @@
-"""로그인 API. 카카오 토큰을 확인하고 우리 토큰(JWT)을 발급한다."""
+"""로그인 API. 카카오 토큰을 확인하고 우리 토큰(JWT)을 발급한다.
+
+내 정보 조회 · 수정(GET · PATCH /me)은 app/api/v1/me.py에 있다.
+"""
 
 from collections.abc import Iterator
 from typing import Annotated
@@ -7,7 +10,6 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.token import TokenUserDep
 from app.core.config import get_settings
 from app.core.security import create_access_token
 from app.db.session import get_db
@@ -52,9 +54,3 @@ def login_kakao(
         is_new_user=is_new,
         user=UserOut.model_validate(user),
     )
-
-
-@router.get("/me", response_model=UserOut)
-def me(user: TokenUserDep):
-    """내 정보. 앱이 자동 로그인할 때 저장된 토큰이 아직 유효한지 확인하는 데 쓴다."""
-    return user
