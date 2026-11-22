@@ -1,9 +1,10 @@
-"""내 계정 API: GET /me · PATCH /me (이름 · 학교 수정)."""
+"""내 계정 API: GET /me · PATCH /me (이름 · 학교) · PATCH /me/settings (알림 설정)."""
 
 import unicodedata
 
 import pytest
 
+from app.models import UserSettings
 from tests.api.conftest import bearer
 from tests.db.factories import make_user
 
@@ -121,3 +122,74 @@ def test_other_user_is_untouched(client, db, auth):
 
 def test_patch_without_token_is_401(client):
     assert client.patch(ME, json={"name": "민석"}).status_code == 401
+
+
+# ---------- 알림 설정 (GET /me의 settings · PATCH /me/settings) ----------
+
+SETTINGS = "/api/v1/me/settings"
+DEFAULTS = {"notify_unmoved": True, "notify_exam": True}
+
+
+def patch_settings(client, auth, body):
+    return client.patch(SETTINGS, json=body, headers=auth)
+
+
+def add_settings(db, user, **values) -> UserSettings:
+    settings = UserSettings(user_id=user.id, **values)
+    db.add(settings)
+    db.flush()
+    return settings
+
+
+def test_get_me_without_settings_row_shows_defaults(client, auth):
+    # make_user는 설정 행을 만들지 않는다 (예전 가입자도 이런 상태일 수 있다)
+    assert get_me(client, auth)["settings"] == DEFAULTS
+
+
+def test_get_me_shows_saved_settings(client, db, auth, user):
+    add_settings(db, user, notify_unmoved=False)
+    assert get_me(client, auth)["settings"] == {"notify_unmoved": False, "notify_exam": True}
+
+
+def test_profile_update_response_includes_settings(client, auth):
+    assert patch_me(client, auth, {"name": "민석"}).json()["settings"] == DEFAULTS
+
+
+def test_update_one_setting_keeps_the_other(client, db, auth, user):
+    add_settings(db, user, notify_unmoved=False)
+    response = patch_settings(client, auth, {"notify_exam": False})
+    assert response.status_code == 200
+    assert response.json() == {"notify_unmoved": False, "notify_exam": False}
+
+
+def test_update_settings_creates_row_when_missing(client, db, auth, user):
+    response = patch_settings(client, auth, {"notify_unmoved": False})
+    assert response.status_code == 200
+    assert response.json() == {"notify_unmoved": False, "notify_exam": True}
+    assert db.get(UserSettings, user.id) is not None
+
+
+def test_settings_update_is_kept_in_get_me(client, auth):
+    patch_settings(client, auth, {"notify_unmoved": False, "notify_exam": False})
+    assert get_me(client, auth)["settings"] == {"notify_unmoved": False, "notify_exam": False}
+
+
+def test_empty_settings_body_changes_nothing(client, db, auth, user):
+    add_settings(db, user, notify_exam=False)
+    assert patch_settings(client, auth, {}).json() == {"notify_unmoved": True, "notify_exam": False}
+
+
+@pytest.mark.parametrize("body", [{"notify_exam": None}, {"notify_unmoved": None}])
+def test_null_setting_is_422(client, auth, body):
+    assert patch_settings(client, auth, body).status_code == 422
+
+
+def test_settings_of_other_user_are_untouched(client, db, auth):
+    other = make_user(db)
+    add_settings(db, other)
+    patch_settings(client, auth, {"notify_unmoved": False, "notify_exam": False})
+    assert get_me(client, bearer(other.id))["settings"] == DEFAULTS
+
+
+def test_patch_settings_without_token_is_401(client):
+    assert client.patch(SETTINGS, json={"notify_exam": False}).status_code == 401

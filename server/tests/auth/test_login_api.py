@@ -36,6 +36,12 @@ def test_first_login_creates_user_with_settings(client, db):
     assert user.settings is not None
 
 
+def test_login_response_includes_settings(client):
+    # 앱이 로그인 직후 알림 스위치를 그릴 수 있게 로그인 응답의 user에도 알림 설정이 들어간다
+    settings = login(client).json()["user"]["settings"]
+    assert settings == {"notify_unmoved": True, "notify_exam": True}
+
+
 def test_second_login_reuses_user(client, db):
     first = login(client).json()
     second = login(client).json()

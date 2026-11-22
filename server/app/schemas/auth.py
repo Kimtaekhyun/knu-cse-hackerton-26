@@ -3,9 +3,10 @@
 import uuid
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import AuthProvider
+from app.schemas.me import UserSettingsOut
 
 
 class KakaoLoginRequest(BaseModel):
@@ -22,6 +23,13 @@ class UserOut(BaseModel):
     name: str
     email: str | None
     school: str | None
+    settings: UserSettingsOut
+
+    @field_validator("settings", mode="before")
+    @classmethod
+    def default_settings(cls, settings: object) -> object:
+        # 설정 행이 없는 사용자(예전 가입자 · 테스트용 사용자)는 기본값으로 보여 준다
+        return UserSettingsOut() if settings is None else settings
 
 
 class LoginResponse(BaseModel):

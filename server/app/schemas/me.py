@@ -1,11 +1,12 @@
-"""내 계정 API(/me)의 요청 형식.
+"""내 계정 API(/me)의 요청 · 응답 형식.
 
-응답(내 정보)은 로그인 응답과 같은 UserOut(app/schemas/auth.py)을 쓴다.
+내 정보 응답은 로그인 응답과 같은 UserOut(app/schemas/auth.py)을 쓰고,
+그 안의 알림 설정(settings)은 여기 UserSettingsOut을 쓴다.
 """
 
 from typing import Annotated
 
-from pydantic import AfterValidator, BaseModel, StringConstraints, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, StringConstraints, field_validator
 
 from app.schemas.text import clean_text
 
@@ -41,3 +42,29 @@ class ProfileUpdate(BaseModel):
         if name is None:
             raise ValueError("이름은 비울 수 없어요.")
         return name
+
+
+class UserSettingsOut(BaseModel):
+    """알림 설정. 알림 예약은 앱이 하고 서버는 켜짐 · 꺼짐만 저장한다 (#21)"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    # 옮기지 않은 판서 알림
+    notify_unmoved: bool = True
+    # 시험 기간 알림
+    notify_exam: bool = True
+
+
+class SettingsUpdate(BaseModel):
+    """보낸 것만 바꾼다. null은 켜짐 · 꺼짐이 아니라서 거절한다"""
+
+    notify_unmoved: bool | None = None
+    notify_exam: bool | None = None
+
+    @field_validator("notify_unmoved", "notify_exam")
+    @classmethod
+    def not_null(cls, value: bool | None) -> bool:
+        # 기본값(None)에는 실행되지 않으므로, null을 직접 보낸 경우만 걸린다
+        if value is None:
+            raise ValueError("켜짐(true)이나 꺼짐(false)으로 보내 주세요.")
+        return value

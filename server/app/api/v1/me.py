@@ -1,10 +1,10 @@
-"""내 계정 API: 내 정보 조회 · 이름 · 학교 수정 (내 계정 화면 23)."""
+"""내 계정 API: 내 정보 조회 · 이름 · 학교 수정 · 알림 설정 (내 계정 화면 23)."""
 
 from fastapi import APIRouter
 
 from app.api.deps import DbDep, UserDep, WriteUserDep
 from app.schemas.auth import UserOut
-from app.schemas.me import ProfileUpdate
+from app.schemas.me import ProfileUpdate, SettingsUpdate, UserSettingsOut
 from app.services import users as service
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -20,3 +20,9 @@ def get_me(user: UserDep):
 def update_me(body: ProfileUpdate, db: DbDep, user: WriteUserDep):
     """이름 · 학교 수정. 보낸 것만 바꾼다"""
     return service.update_profile(db, user, body)
+
+
+@router.patch("/settings", response_model=UserSettingsOut)
+def update_my_settings(body: SettingsUpdate, db: DbDep, user: WriteUserDep):
+    """알림 스위치. 보낸 것만 바꾼다"""
+    return service.update_settings(db, user, body)
