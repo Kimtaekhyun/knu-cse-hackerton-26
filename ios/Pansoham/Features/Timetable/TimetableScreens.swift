@@ -139,9 +139,8 @@ struct TimetableConfirmScreen: View {
     @State private var subjects: [TimetableSubject] = []
     /// 서버에서 시간표를 읽는 상태
     @State private var load: LoadState = .idle
-    /// 고치는 중인 과목 (nil 이면 새 과목 추가)
-    @State private var editingID: UUID?
-    @State private var showEditor = false
+    /// 과목 추가 · 고치기 창. 열 때의 목록을 그대로 담아 둬요 (#111)
+    @State private var editor: Editing?
     /// 원본 사진 크게 보기
     @State private var showOriginal = false
     /// `이대로 저장` 서버 요청 중
@@ -174,10 +173,9 @@ struct TimetableConfirmScreen: View {
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
             .task { if load == .idle { await analyze() } }
-            .sheet(isPresented: $showEditor) {
-                SubjectEditorSheet(subject: subjects.first { $0.id == editingID },
-                                   others: subjects.filter { $0.id != editingID }) { name, time in
-                    save(name: name, time: time)
+            .sheet(item: $editor) { editing in
+                SubjectEditorSheet(subject: editing.subject, others: editing.others) { name, time in
+                    save(name: name, time: time, editing: editing.subject?.id)
                 }
             }
             .fullScreenCover(isPresented: $showOriginal) { OriginalPhotoView(image: router.timetableImage) }
@@ -423,11 +421,20 @@ struct TimetableConfirmScreen: View {
 
     /// 과목 고치기 (nil 이면 새로 추가)
     func edit(_ subject: TimetableSubject?) {
-        editingID = subject?.id
-        showEditor = true
+        // 지금 화면에 남아 있는 과목만 겹침 검사에 넘겨요 (지운 과목은 빠짐)
+        editor = Editing(subject: subject, others: subjects.filter { $0.id != subject?.id })
     }
 
-    private func save(name: String, time: String) {
+    /// 창 하나를 열 때의 값
+    struct Editing: Identifiable {
+        let id = UUID()
+        /// nil 이면 새 과목 추가
+        let subject: TimetableSubject?
+        /// 시간이 겹치는지 볼 다른 과목들
+        let others: [TimetableSubject]
+    }
+
+    private func save(name: String, time: String, editing editingID: UUID?) {
         withAnimation(.easeInOut(duration: 0.2)) {
             if let id = editingID, let i = subjects.firstIndex(where: { $0.id == id }) {
                 subjects[i].name = name
