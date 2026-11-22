@@ -52,6 +52,10 @@ final class Router {
     }
     /// 시간표 업로드(05)에서 고른 캡처. 시간표 확인(06)에서 원본으로 보여 줘요.
     var timetableImage: UIImage?
+    /// 메인 · 학기 화면에서 연 과목 (과목 상세 15 · 18 제목). nil 이면 샘플
+    var subject: SemesterAPI.SubjectDTO?
+    /// 전체 학기(21)에서 연 지난 학기 (22). nil 이면 샘플
+    var pastSemesterID: UUID?
     /// 시간표를 사진 없이 직접 등록하는 중인지 (05 "시간표 직접 등록하기")
     var timetableManual = false
     /// 06 에서 고른 학기. nil 이면 올해 1학기(`Semester.current()`)를 써요.
