@@ -446,8 +446,11 @@ extension HomeScreen {
                             }
                             .buttonStyle(.plain)
                         }
-                        NarrowGrid(count: folders.count, columns: folderColumns) { index in
-                            folderCard(folders[index])
+                        // 폴더 목록은 서버 응답에 따라 개수가 바뀌어요. 한 번만 꺼내 개수와 내용을 같은 값으로 써요
+                        // (따로 읽으면 이전 개수로 만든 칸이 줄어든 목록을 읽어 범위 초과로 멈춰요, #87).
+                        let items = folders
+                        NarrowGrid(count: items.count, columns: folderColumns) { index in
+                            folderCard(items[index])
                                 .scaledBox(236, 166, to: cardWidth)
                             .entrance(appeared, delay: 0.1 + 0.07 * Double(index), duration: 0.4, y: 16)
                         }
