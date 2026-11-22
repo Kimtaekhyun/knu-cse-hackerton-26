@@ -431,7 +431,7 @@ struct ResultScreen: View {
     /// 카드 글자를 클립보드에 넣고 알림을 잠깐 띄워요.
     /// `thenGuide` 면 알림 뒤에 스플릿 뷰 안내로 넘어가고, 아니면 알림만 사라져요.
     private func copy(_ cards: [Sticker], thenGuide: Bool = false) {
-        Clipboard.copy(cards.map(\.text).joined(separator: "\n\n"))
+        Clipboard.copy(cards)
         CardAPI.markMovedQuietly(cards)
         withAnimation(.easeOut(duration: 0.5).delay(0.1)) { copiedCount = cards.count }
         Task {

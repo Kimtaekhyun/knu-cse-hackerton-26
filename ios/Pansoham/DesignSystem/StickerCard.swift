@@ -62,7 +62,8 @@ struct StickerCard: View {
                     InkCrop(sticker: sticker, width: width - 40, height: 64)
                 } else {
                     // $...$ 구간은 수식으로 그려요 (#113)
-                    MathText(text: sticker.text, size: 20, weight: .medium, lineGap: 20 * 1.45 - 24)
+                    MathText(text: sticker.text, size: 20, weight: .medium, lineGap: 20 * 1.45 - 24,
+                             math: sticker.cardType != "code")
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -122,7 +123,7 @@ struct StickerCard: View {
         CardAPI.markMovedQuietly([sticker])
         guard handwriting else {
             // 굿노트는 LaTeX를 그리지 못해서, 수식이 있는 카드는 화면에 보이는 모양을 그림으로 넘겨요 (#113)
-            if sticker.text.contains("$"), let image = MathText.image(sticker.text, width: width - 40) { return NSItemProvider(object: image) }
+            if sticker.hasMath, let image = MathText.image([sticker], width: width - 40) { return NSItemProvider(object: image) }
             return NSItemProvider(object: sticker.text as NSString)
         }
         let renderer = ImageRenderer(content: inkPiece)

@@ -253,7 +253,7 @@ struct CardDetailScreen: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     label("미리보기")
-                    MathText(text: previewText, size: 28, weight: .regular)
+                    MathText(text: previewText, size: 28, weight: .regular, math: kind != 2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
                         .padding(.vertical, 28)
@@ -378,7 +378,7 @@ extension CardDetailScreen {
 
             VStack(alignment: .leading, spacing: 8) {
                 label("미리보기")
-                MathText(text: previewText, size: 26, weight: .regular)
+                MathText(text: previewText, size: 26, weight: .regular, math: kind != 2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 24)
