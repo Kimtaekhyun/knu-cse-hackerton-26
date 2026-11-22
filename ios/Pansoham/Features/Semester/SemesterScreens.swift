@@ -65,7 +65,7 @@ struct AllSemestersScreen: View {
                 }
                 SubjectCard(name: "새 학기 추가", detail: "에브리타임 시간표 올리기",
                             count: 0, style: .dashed, width: 260, symbol: "+") {
-                    router.push(.timetableUpload)
+                    router.startNewSemester()
                 }
                 .entrance(appeared, delay: 0.38, duration: 0.4, y: 16)
             }
@@ -155,7 +155,7 @@ extension AllSemestersScreen {
                 } else {
                     SubjectCard(name: "새 학기 추가", detail: "에브리타임 시간표 올리기",
                                 count: 0, style: .dashed, width: 260, symbol: "+") {
-                        router.push(.timetableUpload)
+                        router.startNewSemester()
                     }
                     .scaledBox(260, 166, to: cardWidth)
                     .entrance(appeared, delay: 0.38, duration: 0.4, y: 16)

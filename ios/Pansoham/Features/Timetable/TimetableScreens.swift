@@ -16,6 +16,27 @@ struct TimetableUploadScreen: View {
     private var picked: Bool { router.timetableImage != nil }
     private func pick(_ image: UIImage) { router.timetableImage = image }
 
+    /// 고른 캡처로 인식하러 가기
+    private func next() {
+        router.timetableManual = false
+        router.push(.timetableConfirm)
+    }
+
+    /// 사진 없이 시간표 확인(06)으로 가서 과목을 직접 넣어요
+    private func startManual() {
+        router.timetableImage = nil
+        router.timetableManual = true
+        router.push(.timetableConfirm)
+    }
+
+    /// 아래 막대 설명 글자 옆 "시간표 직접 등록하기"
+    private func manualButton(_ title: String = "시간표 직접 등록하기", size: CGFloat = 17) -> some View {
+        Button(action: startManual) {
+            Text(title).ds(size, .bold, .dsBlue).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     private func steps(below: Bool = false) -> [String] {
         ["에브리타임 앱에서 시간표 탭 열기",
          "설정 → 이미지로 저장",
@@ -49,9 +70,9 @@ struct TimetableUploadScreen: View {
                 .at(619, 112)
 
             BottomBar(caption: picked ? "이미지 1장 선택됨" : "선택된 이미지 없음") {
-                PrimaryButton(title: "다음", width: 280, enabled: picked) {
-                    router.push(.timetableConfirm)
-                }
+                manualButton()
+            } trailing: {
+                PrimaryButton(title: "다음", width: 280, enabled: picked, action: next)
             }
         }
     }
@@ -123,6 +144,25 @@ struct TimetableConfirmScreen: View {
     @State private var showEditor = false
     /// 원본 사진 크게 보기
     @State private var showOriginal = false
+    /// 학기 고르기 창
+    @State private var showSemesterPicker = false
+
+    /// 사진 없이 직접 등록하는 중인지 (05 "시간표 직접 등록하기")
+    var isManual: Bool { router.timetableManual }
+    /// 지금 고른 학기 (안 골랐으면 올해 1학기)
+    var semester: Semester { router.semester ?? .current() }
+
+    var titleText: String { isManual ? "시간표를 직접 등록해 주세요" : "인식된 시간표를 확인해 주세요" }
+    var detailText: String { isManual ? "과목 추가로 수업을 하나씩 넣어 주세요." : "잘못 읽힌 과목은 눌러서 고칠 수 있어요." }
+    var backTitle: String { isManual ? "뒤로" : "다시 올리기" }
+    var emptyText: String {
+        isManual ? "아직 넣은 과목이 없어요. 과목 추가로 넣어 주세요." : "과목을 찾지 못했어요. 과목 추가로 직접 넣어 주세요."
+    }
+
+    /// 제목 오른쪽 학기 버튼
+    func semesterChip(compact: Bool = false) -> some View {
+        SemesterChip(title: semester.title, compact: compact) { showSemesterPicker = true }
+    }
 
     private let days = ["월", "화", "수", "목", "금"]
     /// 에브리타임 '이미지로 저장' 비율 (가로 / 세로)
@@ -138,17 +178,25 @@ struct TimetableConfirmScreen: View {
                 }
             }
             .fullScreenCover(isPresented: $showOriginal) { OriginalPhotoView(image: router.timetableImage) }
+            .sheet(isPresented: $showSemesterPicker) {
+                SemesterPickerSheet(semester: semester) { router.semester = $0 }
+            }
     }
 
     private var wide: some View {
         DesignCanvas {
-            NavBar(backTitle: "다시 올리기", title: "시간표 확인", onBack: { router.backToUpload() })
+            NavBar(backTitle: backTitle, title: "시간표 확인", onBack: { router.backToUpload() })
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("인식된 시간표를 확인해 주세요").ds(34, .bold)
-                Text("잘못 읽힌 과목은 눌러서 고칠 수 있어요.").ds(17, .regular, .dsSub)
+                Text(titleText).ds(34, .bold)
+                Text(detailText).ds(17, .regular, .dsSub)
             }
             .at(48, 104)
+
+            // 오른쪽 위 학기 (제목 줄 높이에 맞춰요)
+            semesterChip()
+                .frame(width: DS.width - 96, alignment: .trailing)
+                .at(48, 108)
 
             // 원본: 에브리타임 '이미지로 저장' 비율(1158 × 1275)에 맞춘 박스
             photoBox(height: 452).at(48, 210)
@@ -220,7 +268,7 @@ struct TimetableConfirmScreen: View {
         VStack(alignment: .leading, spacing: 0) {
             if load == .loaded {
                 if subjects.isEmpty {
-                    Text("과목을 찾지 못했어요. 과목 추가로 직접 넣어 주세요.").ds(15, .regular, .dsSub).padding(.vertical, 14)
+                    Text(emptyText).ds(15, .regular, .dsSub).padding(.vertical, 14)
                 }
                 ForEach(subjects) { subject in
                     HStack(spacing: 14) {
@@ -280,6 +328,11 @@ struct TimetableConfirmScreen: View {
     /// 05 에서 고른 캡처를 서버로 보내 과목 목록을 채워요.
     /// 캡처가 없으면(개발용 `-startScreen timetableConfirm`) 샘플 과목을 보여 줘요.
     private func analyze() async {
+        // 직접 등록: 빈 목록에서 과목 추가로 채워요
+        if isManual {
+            load = .loaded
+            return
+        }
         guard let image = router.timetableImage else {
             subjects = SampleData.timetable
             load = .loaded
@@ -299,7 +352,7 @@ struct TimetableConfirmScreen: View {
         switch load {
         case .idle, .loading: "시간표를 읽는 중이에요"
         case .failed: "시간표를 읽지 못했어요"
-        case .loaded: "과목 \(subjects.count)개를 찾았어요"
+        case .loaded: isManual ? "과목 \(subjects.count)개를 넣었어요" : "과목 \(subjects.count)개를 찾았어요"
         }
     }
 
@@ -375,9 +428,9 @@ extension TimetableUploadScreen {
                     .at(48, 462)
 
                 PortraitBottomBar(caption: picked ? "이미지 1장 선택됨" : "선택된 이미지 없음") {
-                    PrimaryButton(title: "다음", width: 280, enabled: picked) {
-                        router.push(.timetableConfirm)
-                    }
+                    manualButton()
+                } trailing: {
+                    PrimaryButton(title: "다음", width: 280, enabled: picked, action: next)
                 }
                 .at(0, 1090)
             }
@@ -431,10 +484,11 @@ extension TimetableUploadScreen {
             .imageDrop(isTargeted: $dropTargeted, onDrop: pick)
 
         }, bottom: {
-            NarrowBottomBar(caption: picked ? "이미지 1장 선택됨" : "선택된 이미지 없음") {
-                PrimaryButton(title: "다음", width: inner < 440 ? 150 : 200, enabled: picked) {
-                    router.push(.timetableConfirm)
-                }
+            // 좁은 창은 자리가 모자라서 짧게
+            NarrowBottomBar(caption: picked ? "이미지 1장 선택됨" : nil) {
+                manualButton("직접 등록", size: 15)
+            } trailing: {
+                PrimaryButton(title: "다음", width: inner < 440 ? 150 : 200, enabled: picked, action: next)
             }
         })
     }
@@ -452,14 +506,18 @@ extension TimetableConfirmScreen {
     private var portrait: some View {
         PortraitCanvas {
             ZStack(alignment: .topLeading) {
-                PortraitNavBar(backTitle: "다시 올리기", title: "시간표 확인", onBack: { router.backToUpload() })
+                PortraitNavBar(backTitle: backTitle, title: "시간표 확인", onBack: { router.backToUpload() })
                     .at(0, 24)
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("인식된 시간표를 확인해 주세요").ds(34, .bold)
-                    Text("잘못 읽힌 과목은 눌러서 고칠 수 있어요.").ds(17, .regular, .dsSub)
+                    Text(titleText).ds(34, .bold)
+                    Text(detailText).ds(17, .regular, .dsSub)
                 }
                 .at(48, 104)
+
+                semesterChip()
+                    .frame(width: portraitWidth - 96, alignment: .trailing)
+                    .at(48, 108)
 
                 photoBox(height: 372)
                     .frame(width: 738, height: 404)
@@ -484,10 +542,10 @@ extension TimetableConfirmScreen {
     /// 스플릿 뷰처럼 좁은 창
     private func compact(_ size: CGSize) -> some View {
         let inner = size.width - 40
-        return NarrowPage(backTitle: "다시 올리기", barTitle: "시간표 확인", onBack: { router.backToUpload() },
-                          title: "인식된 시간표를 확인해 주세요",
-                          detail: "잘못 읽힌 과목은 눌러서 고칠 수 있어요.",
-                          trailing: { EmptyView() }, content: {
+        return NarrowPage(backTitle: backTitle, barTitle: "시간표 확인", onBack: { router.backToUpload() },
+                          title: titleText,
+                          detail: detailText,
+                          trailing: { semesterChip(compact: true) }, content: {
             // 원본 (작게)
             photoBox(height: 452)
                 .scaledBox((452 * photoRatio).rounded(), 452, to: min(inner, 300))
@@ -496,7 +554,7 @@ extension TimetableConfirmScreen {
             VStack(alignment: .leading, spacing: 0) {
                 if load == .loaded {
                     if subjects.isEmpty {
-                        Text("과목을 찾지 못했어요. 과목 추가로 직접 넣어 주세요.").dsWrap(15, .regular, .dsSub).padding(.vertical, 14)
+                        Text(emptyText).dsWrap(15, .regular, .dsSub).padding(.vertical, 14)
                     }
                     ForEach(subjects) { subject in
                         HStack(spacing: 14) {

@@ -52,6 +52,10 @@ final class Router {
     }
     /// 시간표 업로드(05)에서 고른 캡처. 시간표 확인(06)에서 원본으로 보여 줘요.
     var timetableImage: UIImage?
+    /// 시간표를 사진 없이 직접 등록하는 중인지 (05 "시간표 직접 등록하기")
+    var timetableManual = false
+    /// 06 에서 고른 학기. nil 이면 올해 1학기(`Semester.current()`)를 써요.
+    var semester: Semester?
     /// 메인 `앨범에서 선택` 으로 고른 판서 사진들. 처리 중(10)이 한 장씩 차례로 처리해요.
     var albumPhotos: [UIImage] = []
     /// 방금 처리한 사진 수. 2장 이상이면 결과(12)가 사진 탭을 보여 줘요.
@@ -91,6 +95,13 @@ final class Router {
     /// 시간표 확인(06)의 "다시 올리기": 업로드(05)에서 왔으면 뒤로, 내 계정 등에서 바로 왔으면 업로드 화면으로 바꿔요.
     func backToUpload() {
         if stack.dropLast().last == .timetableUpload { pop() } else { replace(.timetableUpload, direction: .back) }
+    }
+    /// 전체 학기의 "새 학기 추가": 이전에 고른 캡처 · 학기를 비우고 시간표 등록(05)부터
+    func startNewSemester() {
+        timetableImage = nil
+        timetableManual = false
+        semester = nil
+        push(.timetableUpload)
     }
     /// 쌓인 화면 중 가장 가까운 `screen` 까지 돌아가기. 없으면 새로 시작.
     func popTo(_ screen: Screen) {

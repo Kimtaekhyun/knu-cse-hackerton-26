@@ -116,15 +116,23 @@ struct NarrowPage<Trailing: View, Content: View, Bottom: View>: View {
 }
 
 /// 좁은 화면 아래 막대 (왼쪽 설명 · 오른쪽 버튼)
-struct NarrowBottomBar<Trailing: View>: View {
-    var caption: String? = nil
-    @ViewBuilder var trailing: Trailing
+struct NarrowBottomBar<Trailing: View, Accessory: View>: View {
+    var caption: String?
+    var accessory: Accessory
+    var trailing: Trailing
+
+    init(caption: String? = nil, @ViewBuilder accessory: () -> Accessory, @ViewBuilder trailing: () -> Trailing) {
+        self.caption = caption
+        self.accessory = accessory()
+        self.trailing = trailing()
+    }
 
     var body: some View {
         HStack(spacing: 12) {
             if let caption {
                 Text(caption).dsWrap(15, .medium, .dsSub).lineLimit(2)
             }
+            accessory
             Spacer(minLength: 0)
             trailing
         }
@@ -132,6 +140,12 @@ struct NarrowBottomBar<Trailing: View>: View {
         .padding(.vertical, 14)
         .background(Color.white)
         .overlay(alignment: .top) { Rectangle().fill(Color.dsLine).frame(height: 1) }
+    }
+}
+
+extension NarrowBottomBar where Accessory == EmptyView {
+    init(caption: String? = nil, @ViewBuilder trailing: () -> Trailing) {
+        self.init(caption: caption, accessory: { EmptyView() }, trailing: trailing)
     }
 }
 
