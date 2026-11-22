@@ -87,7 +87,7 @@ final class CaptureFlow {
 
     /// 판서가 저장된 곳 이름 ("자료구조 폴더" · "미분류함")
     func placeTitle(of capture: CaptureDTO?) -> String {
-        if let openedFolder { return "\(openedFolder) 폴더" }
+        if let openedFolder { return openedFolder == "미분류함" ? openedFolder : "\(openedFolder) 폴더" }
         guard let capture else { return destination?.placeTitle ?? "미분류함" }
         guard let subjectId = capture.subjectId else { return "미분류함" }
         if let destination, destination.subjectId == subjectId { return destination.placeTitle }

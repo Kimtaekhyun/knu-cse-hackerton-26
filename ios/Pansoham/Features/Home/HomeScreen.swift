@@ -30,7 +30,14 @@ struct HomeScreen: View {
             Adaptive { canvas(t) } narrow: { narrow($0, t) }
         }
             .onAppear { appeared = true }
-            .task { await SemesterStore.shared.reload() }
+            .task {
+                await SemesterStore.shared.reload()
+                // 로그인했으면 미분류함 수 · 아직 옮기지 않은 판서도 받아요
+                guard AuthSession.shared.isLoggedIn else { return }
+                async let unsorted: Void = SubjectCaptures.unsorted.load(.unsorted)
+                async let unmoved: Void = SubjectCaptures.unmoved.load(.unmoved)
+                _ = await (unsorted, unmoved)
+            }
             .overlay {
                 if picked.count > 1 {
                     AlbumReviewSheet(photos: $picked,
@@ -128,7 +135,7 @@ struct HomeScreen: View {
         VStack(alignment: .leading, spacing: 32) {
             nowCard(t)
             todayList()
-            if !isFirst { pendingPanel() }
+            if !isFirst && !PendingNote.current.isEmpty { pendingPanel() }
         }
     }
 
@@ -210,7 +217,7 @@ struct HomeScreen: View {
             HStack {
                 HStack(spacing: 8) {
                     Text("아직 옮기지 않은 판서").ds(16, .bold)
-                    Text("3").ds(12, .bold, .white)
+                    Text("\(PendingNote.current.count)").ds(12, .bold, .white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
                         .background(Color.dsBlue)
@@ -224,10 +231,10 @@ struct HomeScreen: View {
                 }
                 .buttonStyle(.plain)
             }
-            pendingRow(title: "자료구조 · 오늘 10:42", detail: "카드 4개 · 굿노트로 옮기지 않았어요", x: -0.5, y: -0.1667)
-                .entrance(shown, delay: 0.5, duration: 0.35, y: 12)
-            pendingRow(title: "컴퓨터구조 · 11월 11일", detail: "카드 6개 · 6일째 그대로예요", x: -0.0333, y: -0.6667)
-                .entrance(shown, delay: 0.62, duration: 0.35, y: 12)
+            ForEach(Array(PendingNote.current.prefix(2).enumerated()), id: \.element.id) { index, note in
+                pendingRow(note)
+                    .entrance(shown, delay: 0.5 + 0.12 * Double(index), duration: 0.35, y: 12)
+            }
         }
         .padding(.top, 16)
         .padding(.bottom, 12)
@@ -237,13 +244,13 @@ struct HomeScreen: View {
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    private func pendingRow(title: String, detail: String, x: CGFloat, y: CGFloat) -> some View {
-        Button { router.push(.result) } label: {
+    private func pendingRow(_ note: PendingNote) -> some View {
+        Button { note.open(router) } label: {
             HStack(spacing: 12) {
-                BoardPhoto(width: 52, height: 40, scaleX: 1.6667, scaleY: 1.6667, x: x, y: y)
+                note.thumb(width: 52, height: 40, scale: 1.6667, radius: 8)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).ds(14, .bold)
-                    Text(detail).ds(12, .regular, .dsSub)
+                    Text(note.title).ds(14, .bold)
+                    Text(note.detail).ds(12, .regular, .dsSub)
                 }
                 Spacer(minLength: 0)
                 Image("chevron-right-18")
@@ -314,7 +321,7 @@ struct HomeScreen: View {
     /// 로그인했으면 서버의 현재 학기 과목, 아니면 샘플 폴더
     private var folders: [Folder] {
         let unsorted = Folder(name: "미분류함", detail: "시간표 밖에서 찍은 판서",
-                              count: store.isLive ? 0 : counts[5], style: .dashed) { router.push(.unsorted) }
+                              count: store.isLive ? SubjectCaptures.unsorted.items.count : counts[5], style: .dashed) { router.push(.unsorted) }
         guard store.isLive else {
             let samples: [(String, String, Screen)] = [
                 ("자료구조", "월 10:30–12:00", isFirst ? .subjectEmpty : .subjectLessons),
@@ -430,7 +437,7 @@ extension HomeScreen {
                 VStack(alignment: .leading, spacing: 28) {
                     nowCard(t, width: inner)
                     todayList(inner)
-                    if !isFirst { pendingPanel(inner) }
+                    if !isFirst && !PendingNote.current.isEmpty { pendingPanel(inner) }
 
                     // 과목 폴더
                     VStack(alignment: .leading, spacing: 14) {
