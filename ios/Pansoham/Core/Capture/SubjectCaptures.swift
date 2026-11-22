@@ -63,7 +63,7 @@ final class SubjectCaptures {
     private(set) var state: State = .idle
     /// 과목 폴더면 그 과목 id
     var subjectID: UUID? { if case .subject(let id) = source { id } else { nil } }
-    private(set) var items: [Item] = []
+    fileprivate(set) var items: [Item] = []
 
     /// 서버 판서를 쓰는지 (로그인 + 메인에서 실제 과목을 열었을 때)
     func isLive(_ subject: SemesterAPI.SubjectDTO?) -> Bool {
@@ -89,6 +89,19 @@ final class SubjectCaptures {
     /// 옮긴 판서를 목록에서 바로 빼요 (서버는 이미 반영됨)
     func remove(_ id: UUID) { items.removeAll { $0.id == id } }
 
+    /// 카드를 고치거나(`card`) 지웠을 때(`removed`) 받아 둔 목록에도 반영 (#99)
+    @MainActor
+    static func updateCard(_ card: CardDTO? = nil, removed: UUID? = nil) {
+        for store in [shared, unsorted, unmoved] {
+            for index in store.items.indices {
+                guard var capture = Optional(store.items[index].capture) else { continue }
+                if let removed { capture.cards.removeAll { $0.id == removed } }
+                if let card, let at = capture.cards.firstIndex(where: { $0.id == card.id }) { capture.cards[at] = card }
+                store.items[index].capture = capture
+            }
+        }
+    }
+
     /// 판서 지우기 (#93). 서버에서 지운 뒤 과목 폴더 · 미분류함 · 옮기지 않은 판서 목록에서 모두 빼요.
     @MainActor
     static func delete(_ ids: [UUID]) async throws {
@@ -109,9 +122,9 @@ final class SubjectCaptures {
         return lessons.flatMap(\.items).flatMap { item in
             item.stickers.map { sticker in
                 number += 1
-                return (Sticker(id: number, title: sticker.title, kind: sticker.kind, text: sticker.text,
-                                x: sticker.x, y: sticker.y, w: sticker.w, h: sticker.h,
-                                photo: sticker.photo, photoAspect: sticker.photoAspect), item)
+                var renumbered = sticker
+                renumbered.id = number
+                return (renumbered, item)
             }
         }
     }

@@ -50,6 +50,21 @@ final class CaptureFlow {
     var failed: Job?
     /// 지금 찍으면 저장될 곳 ("자료구조 폴더" · "미분류함")
     var destination: CaptureDestination?
+    /// 카드 상세(17)에서 고칠 서버 카드 (결과 · 카드 모아 보기에서 눌렀을 때, #99)
+    var openedCard: Sticker?
+
+    /// 카드를 고치거나 지웠을 때 결과 화면 · 받아 둔 목록에 반영
+    @MainActor
+    func updateCard(_ card: CardDTO? = nil, removed: UUID? = nil) {
+        for index in results.indices {
+            guard var capture = results[index].capture else { continue }
+            if let removed { capture.cards.removeAll { $0.id == removed } }
+            if let card, let at = capture.cards.firstIndex(where: { $0.id == card.id }) { capture.cards[at] = card }
+            results[index].capture = capture
+        }
+        SubjectCaptures.updateCard(card, removed: removed)
+    }
+
     /// 과목 폴더(15 · 16)에서 저장된 판서를 열었으면 그 과목 이름. 결과 화면 뒤로 가기가 폴더로 돌아가요.
     var openedFolder: String?
 
