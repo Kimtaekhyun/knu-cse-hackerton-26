@@ -47,4 +47,10 @@ enum AuthAPI {
     static func me() async throws -> UserDTO {
         try await APIClient.json("GET", path: "api/v1/me", as: UserDTO.self)
     }
+
+    /// 학교 저장 (#105). 보낸 칸만 바꿔요.
+    static func updateSchool(_ school: String) async throws -> UserDTO {
+        struct Body: Encodable { let school: String }
+        return try await APIClient.json("PATCH", path: "api/v1/me", body: Body(school: school), as: UserDTO.self)
+    }
 }

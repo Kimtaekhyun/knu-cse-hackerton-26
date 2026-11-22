@@ -15,20 +15,54 @@ struct AccountScreen: View {
     @AppStorage("profileSchool") private var school = "경북대학교"
     @State private var editingProfile = false
     @State private var draftName = ""
-    @State private var draftSchool = ""
+    /// 서버에 저장된 학교 (로그인했을 때, #105)
+    @State private var liveSchool: String?
+    @State private var pickingSchool = false
+    @State private var savingSchool = false
+    @State private var schoolError: String?
     @State private var confirmingDelete = false
     @State private var confirmingLogout = false
 
+    private var isLive: Bool { AuthSession.shared.isLoggedIn }
+    /// 화면에 보여 줄 학교: 로그인했으면 서버 값, 아니면 기기에 저장한 값. 없으면 nil
+    private var shownSchool: String? {
+        let value = isLive ? liveSchool : school
+        guard let value, !value.isEmpty else { return nil }
+        return value
+    }
+
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
+            .overlay {
+                if pickingSchool {
+                    ZStack {
+                        Color.black.opacity(0.2).ignoresSafeArea()
+                            .onTapGesture { if !savingSchool { closePicker() } }
+                        GeometryReader { geo in
+                            SchoolPicker(current: shownSchool, saving: savingSchool, onCancel: closePicker, onSave: saveSchool)
+                                .scaleEffect(min(1, (geo.size.width - 32) / 540))
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, min(150, geo.size.height * 0.15))
+                        }
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .task {
+                guard isLive, let me = try? await AuthAPI.me() else { return }
+                liveSchool = me.school
+            }
+            .alert("학교를 저장하지 못했어요", isPresented: Binding(get: { schoolError != nil }, set: { if !$0 { schoolError = nil } })) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(schoolError ?? "")
+            }
             .alert("프로필 수정", isPresented: $editingProfile) {
                 TextField("이름", text: $draftName)
-                TextField("학교", text: $draftSchool)
                 Button("취소", role: .cancel) {}
                 Button("저장") {
                     let newName = draftName.trimmingCharacters(in: .whitespaces)
                     if !newName.isEmpty { name = newName }
-                    school = draftSchool.trimmingCharacters(in: .whitespaces)
                 }
             }
             .alert("로그아웃할까요?", isPresented: $confirmingLogout) {
@@ -46,6 +80,51 @@ struct AccountScreen: View {
             }
     }
 
+    private func closePicker() {
+        withAnimation(.easeOut(duration: 0.2)) { pickingSchool = false }
+    }
+
+    /// 학교 저장: 로그인했으면 `PATCH /me`, 아니면 기기에만
+    private func saveSchool(_ value: String) {
+        guard isLive else {
+            school = value
+            closePicker()
+            return
+        }
+        savingSchool = true
+        Task {
+            defer { savingSchool = false }
+            do {
+                liveSchool = try await AuthAPI.updateSchool(value).school
+                closePicker()
+            } catch {
+                schoolError = error.localizedDescription
+            }
+        }
+    }
+
+    /// 프로필 카드 아래 "학교" 칸 (23-3 · 23-5)
+    private func schoolGroup(_ width: CGFloat) -> some View {
+        group("학교", width) {
+            Button { withAnimation(.easeOut(duration: 0.2)) { pickingSchool = true } } label: {
+                HStack {
+                    if let shownSchool {
+                        Text(shownSchool).ds(16, .medium)
+                        Spacer()
+                        Text("변경").ds(16, .regular, .dsSub)
+                    } else {
+                        Text("학교를 입력해 주세요").ds(16, .medium, .dsBlue)
+                        Spacer()
+                    }
+                    Image("chevron-right-18")
+                }
+                .padding(.vertical, 13)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     /// 저장된 로그인 토큰과 카카오 로그인을 지우고 로그인 화면으로
     private func logout() {
         AuthSession.shared.logout()
@@ -58,6 +137,7 @@ struct AccountScreen: View {
             Text("내 계정").ds(34, .bold).at(48, 92)
 
             profileCard().at(48, 164)
+            schoolGroup(340).at(48, 560)
 
             settings(710).at(436, 104)
         }
@@ -104,13 +184,12 @@ struct AccountScreen: View {
                 .tracking(-0.6)
                 .foregroundStyle(.black)
             Color.clear.frame(width: 1, height: 4)
-            Text(school).ds(15, .regular, .dsSub)
+            Text(shownSchool ?? "학교 미입력").ds(15, .regular, .dsSub)
             Color.clear.frame(width: 1, height: 4)
             Text("카카오 계정으로 로그인됨").ds(13, .regular, .dsSub)
             Color.clear.frame(width: 1, height: 20)
             SecondaryButton(title: "프로필 수정", width: width - 48) {
                 draftName = name
-                draftSchool = school
                 editingProfile = true
             }
         }
@@ -188,6 +267,7 @@ extension AccountScreen {
         return NarrowPage(backTitle: "chalkdrop", onBack: { router.pop() }, title: "내 계정",
                           trailing: { EmptyView() }, content: {
             profileCard(inner)
+            schoolGroup(inner)
             settings(inner).padding(.top, 8)
         }, bottom: { EmptyView() })
     }
