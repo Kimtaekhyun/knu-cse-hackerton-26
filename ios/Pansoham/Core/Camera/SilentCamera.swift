@@ -1,0 +1,275 @@
+//
+//  SilentCamera.swift
+//  chalkdrop
+//
+//  수업 중에 쓰는 무음 카메라 (#78).
+//
+//  사진 촬영(AVCapturePhotoOutput)은 iOS 가 셔터음을 직접 내고, 한국 판매 기기는 무음 모드여도 소리가 나요.
+//  그래서 영상 프레임(AVCaptureVideoDataOutput)을 계속 받다가, 셔터를 누르면 그다음 몇 프레임 중
+//  가장 선명한 한 장을 사진으로 써요. 영상 프레임을 가져오는 건 촬영이 아니라서 소리가 나지 않아요.
+//
+
+import AVFoundation
+import CoreImage
+import SwiftUI
+import UIKit
+
+/// 화면이 보는 카메라 상태. 실제 카메라 작업은 `CameraEngine` 이 별도 줄(큐)에서 해요.
+@Observable
+final class SilentCamera {
+    enum Status: Equatable {
+        /// 아직 권한을 묻기 전 · 준비 중
+        case idle
+        /// 미리보기가 나오는 중
+        case running
+        /// 카메라 권한을 거부했어요 (설정에서 켜야 해요)
+        case denied
+        /// 카메라가 없어요 (시뮬레이터 등). 앨범으로 대신해요
+        case unavailable
+    }
+
+    private(set) var status: Status = .idle
+    /// 셔터를 누르고 사진을 고르는 중 (중복 촬영 막기)
+    private(set) var isCapturing = false
+
+    let engine = CameraEngine()
+
+    /// 화면에 들어올 때: 권한 확인 → 세션 시작
+    func start() async {
+        guard engine.hasCamera else {
+            status = .unavailable
+            return
+        }
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            break
+        case .notDetermined:
+            guard await AVCaptureDevice.requestAccess(for: .video) else {
+                status = .denied
+                return
+            }
+        default:
+            status = .denied
+            return
+        }
+        status = await engine.start() ? .running : .unavailable
+    }
+
+    /// 화면을 떠날 때 (배터리 · 발열 때문에 꼭 멈춰요)
+    func stop() {
+        engine.stop()
+        if status == .running { status = .idle }
+    }
+
+    /// 무음 촬영. 셔터 뒤 몇 프레임 중 가장 선명한 한 장을 돌려줘요.
+    func capture() async -> UIImage? {
+        guard status == .running, !isCapturing else { return nil }
+        isCapturing = true
+        defer { isCapturing = false }
+        return await engine.captureSharpest()
+    }
+
+    /// 미리보기에서 누른 곳에 초점 · 노출 맞추기 (0~1 카메라 좌표)
+    func focus(at point: CGPoint) {
+        engine.focus(at: point)
+    }
+}
+
+// MARK: - 카메라 작업 (별도 큐)
+
+/// AVCaptureSession 을 다루는 부분. 모든 세션 작업은 `sessionQueue` 에서,
+/// 프레임은 `frameQueue` 에서 받아요. 화면(메인) 쪽에는 async 함수로만 결과를 넘겨요.
+nonisolated final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
+    let session = AVCaptureSession()
+
+    private let sessionQueue = DispatchQueue(label: "chalkdrop.camera.session")
+    private let frameQueue = DispatchQueue(label: "chalkdrop.camera.frames")
+    private let output = AVCaptureVideoDataOutput()
+    private var device: AVCaptureDevice?
+    private var configured = false
+
+    /// 선명도 계산 · 이미지 만들기에 쓰는 Core Image (GPU)
+    private let ciContext = CIContext(options: [.cacheIntermediates: false])
+
+    // 아래 세 값은 frameQueue 에서만 읽고 써요.
+    /// 셔터 뒤 아직 더 볼 프레임 수 (0 이면 촬영 중 아님)
+    private var framesLeft = 0
+    /// 지금까지 본 프레임 중 가장 선명한 것
+    private var best: (image: CIImage, score: Double)?
+    private var finish: ((UIImage?) -> Void)?
+
+    /// 셔터 뒤 몇 프레임을 볼지. 30fps 기준 약 0.2초라 기다리는 느낌은 거의 없어요.
+    private let framesPerShot = 6
+    /// 미리보기 · 사진의 회전 (아이패드를 돌려도 사진이 똑바로 나오게)
+    private var rotation: AVCaptureDevice.RotationCoordinator?
+    private var rotationObservation: NSKeyValueObservation?
+    /// 미리보기 레이어 (회전 계산에 필요해요)
+    weak var previewLayer: AVCaptureVideoPreviewLayer?
+
+    var hasCamera: Bool { Self.backCamera() != nil }
+
+    private static func backCamera() -> AVCaptureDevice? {
+        AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+    }
+
+    /// 세션을 만들고 시작해요. 성공하면 true.
+    func start() async -> Bool {
+        await withCheckedContinuation { continuation in
+            sessionQueue.async {
+                if !self.configured { self.configured = self.configure() }
+                if self.configured && !self.session.isRunning { self.session.startRunning() }
+                continuation.resume(returning: self.configured && self.session.isRunning)
+            }
+        }
+    }
+
+    func stop() {
+        sessionQueue.async {
+            if self.session.isRunning { self.session.stopRunning() }
+        }
+    }
+
+    private func configure() -> Bool {
+        guard let device = Self.backCamera(),
+              let input = try? AVCaptureDeviceInput(device: device) else { return false }
+
+        session.beginConfiguration()
+        defer { session.commitConfiguration() }
+
+        // 판서 글씨가 읽히도록 가장 높은 해상도부터 (4K ≈ 830만 화소)
+        for preset in [AVCaptureSession.Preset.hd4K3840x2160, .hd1920x1080, .high] where session.canSetSessionPreset(preset) {
+            session.sessionPreset = preset
+            break
+        }
+        guard session.canAddInput(input) else { return false }
+        session.addInput(input)
+
+        // 프레임은 BGRA 로 받고, 늦은 프레임은 버려서 미리보기가 밀리지 않게
+        output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        output.alwaysDiscardsLateVideoFrames = true
+        output.setSampleBufferDelegate(self, queue: frameQueue)
+        guard session.canAddOutput(output) else { return false }
+        session.addOutput(output)
+
+        // 영상 흔들림 보정은 끄기: 켜면 프레임이 잘리고 늦게 나와요
+        output.connection(with: .video)?.preferredVideoStabilizationMode = .off
+
+        try? device.lockForConfiguration()
+        if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
+        if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
+        if device.isSmoothAutoFocusSupported { device.isSmoothAutoFocusEnabled = false }
+        // 탭으로 맞춘 초점이 장면이 바뀌면 다시 자동으로 돌아오게
+        device.isSubjectAreaChangeMonitoringEnabled = true
+        device.unlockForConfiguration()
+
+        self.device = device
+        return true
+    }
+
+    /// 미리보기 레이어가 생기면 회전을 맞춰요. (메인에서 불러요)
+    func attach(_ layer: AVCaptureVideoPreviewLayer) {
+        previewLayer = layer
+        guard let device = Self.backCamera() else { return }
+        let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: layer)
+        rotation = coordinator
+        apply(coordinator.videoRotationAngleForHorizonLevelPreview, to: layer.connection)
+        rotationObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview, options: .new) { [weak layer] coordinator, _ in
+            DispatchQueue.main.async {
+                self.apply(coordinator.videoRotationAngleForHorizonLevelPreview, to: layer?.connection)
+            }
+        }
+    }
+
+    private func apply(_ angle: CGFloat, to connection: AVCaptureConnection?) {
+        guard let connection, connection.isVideoRotationAngleSupported(angle) else { return }
+        connection.videoRotationAngle = angle
+    }
+
+    /// 셔터: 다음 `framesPerShot` 프레임 중 가장 선명한 것을 사진으로
+    func captureSharpest() async -> UIImage? {
+        // 사진 회전은 셔터 순간의 방향으로 (frameQueue 에 넘기기 전에 메인에서 읽어요)
+        let angle = await MainActor.run { rotation?.videoRotationAngleForHorizonLevelCapture ?? 0 }
+        return await withCheckedContinuation { continuation in
+            frameQueue.async {
+                self.best = nil
+                self.captureAngle = angle
+                self.framesLeft = self.framesPerShot
+                self.finish = { continuation.resume(returning: $0) }
+            }
+        }
+    }
+
+    /// 셔터 순간의 회전 각도 (frameQueue 에서만)
+    private var captureAngle: CGFloat = 0
+
+    /// 누른 곳(0~1 카메라 좌표)에 초점 · 노출
+    func focus(at point: CGPoint) {
+        sessionQueue.async {
+            guard let device = self.device, (try? device.lockForConfiguration()) != nil else { return }
+            if device.isFocusPointOfInterestSupported, device.isFocusModeSupported(.autoFocus) {
+                device.focusPointOfInterest = point
+                device.focusMode = .autoFocus
+            }
+            if device.isExposurePointOfInterestSupported, device.isExposureModeSupported(.autoExpose) {
+                // 프로젝터 · 모니터 화면이 하얗게 날아가지 않게 누른 곳 기준으로 노출
+                device.exposurePointOfInterest = point
+                device.exposureMode = .autoExpose
+            }
+            device.unlockForConfiguration()
+        }
+    }
+
+    // MARK: 프레임 받기 (frameQueue)
+
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard framesLeft > 0, let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        framesLeft -= 1
+
+        let image = CIImage(cvPixelBuffer: pixels)
+        let score = sharpness(of: image)
+        if best == nil || score > best!.score {
+            // 픽셀 버퍼는 카메라가 다시 써야 해서 오래 붙잡지 않게 한 장만 남겨요
+            best = (image, score)
+        }
+
+        if framesLeft == 0 {
+            let photo = best.flatMap { render($0.image) }
+            best = nil
+            let done = finish
+            finish = nil
+            done?(photo)
+        }
+    }
+
+    /// 선명도 점수: 작게 줄인 흑백 이미지의 윤곽선(엣지) 세기 평균. 흔들리면 윤곽이 흐려져 점수가 낮아요.
+    private func sharpness(of image: CIImage) -> Double {
+        let scale = 480 / max(image.extent.width, 1)
+        let small = image
+            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            .applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0])
+            .applyingFilter("CIEdges", parameters: [kCIInputIntensityKey: 4])
+        let average = small.applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: small.extent)])
+
+        var pixel = [UInt8](repeating: 0, count: 4)
+        ciContext.render(average, toBitmap: &pixel, rowBytes: 4,
+                         bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                         format: .RGBA8, colorSpace: nil)
+        return Double(pixel[0]) + Double(pixel[1]) + Double(pixel[2])
+    }
+
+    /// 고른 프레임을 셔터 순간 방향으로 돌려 UIImage 로
+    private func render(_ image: CIImage) -> UIImage? {
+        guard let cgImage = ciContext.createCGImage(image, from: image.extent) else { return nil }
+        return UIImage(cgImage: cgImage, scale: 1, orientation: Self.orientation(for: captureAngle))
+    }
+
+    /// 회전 각도(0 · 90 · 180 · 270) → 이미지 방향. 프레임은 센서 기준(가로)으로 들어와요.
+    private static func orientation(for angle: CGFloat) -> UIImage.Orientation {
+        switch Int(angle.rounded()) % 360 {
+        case 90: .right
+        case 180: .down
+        case 270: .left
+        default: .up
+        }
+    }
+}

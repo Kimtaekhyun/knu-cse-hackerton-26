@@ -5,7 +5,7 @@
 //  피그마 와이어프레임에 적힌 예시 값. 나중에 진짜 데이터로 바꾸면 돼요.
 //
 
-import Foundation
+import UIKit
 
 struct TimetableSubject: Identifiable, Hashable {
     let id = UUID()
@@ -33,6 +33,9 @@ struct Sticker: Identifiable, Hashable {
     var x: CGFloat = 204.6, y: CGFloat = 36.27, w: CGFloat = 159.96, h: CGFloat = 100.44
     var handwriting = false     // 처음부터 손글씨로 보여 줄지
     var inkImage: String? = nil // 손글씨 그림이 따로 있으면 그 이름
+    /// 서버에서 받은 판서 사진 (없으면 샘플 사진 `board-photo`). 자리는 너비 372 · 높이 372 × photoAspect 기준
+    var photo: UIImage? = nil
+    var photoAspect: CGFloat = 279.0 / 372.0
 }
 
 extension SampleData {
