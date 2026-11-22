@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, captures, cards, semesters, subjects, timetable
+from app.api.v1 import auth, captures, cards, me, semesters, subjects, timetable
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(captures.router)
@@ -11,3 +11,4 @@ api_router.include_router(timetable.router)
 api_router.include_router(semesters.router)
 api_router.include_router(subjects.router)
 api_router.include_router(auth.router)
+api_router.include_router(me.router)

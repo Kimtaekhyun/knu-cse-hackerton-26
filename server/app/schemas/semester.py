@@ -4,13 +4,13 @@
 인식 결과를 그대로 저장 요청에 넣을 수 있다.
 """
 
-import unicodedata
 import uuid
 from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints, model_validator
 
 from app.models import SemesterTerm
+from app.schemas.text import clean_text
 
 HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
 
@@ -19,21 +19,10 @@ MAX_SUBJECTS = 50
 MAX_SLOTS = 20
 
 
-def _clean_name(name: str) -> str:
-    """한글을 NFC로 맞추고 제어 문자(NUL · 줄바꿈 등)를 거절한다.
-
-    iOS 입력과 서버 인식 결과의 정규화가 다르면 눈에 같은 '자료구조'가
-    다른 문자열이 되어 중복 검사 · 이름 병합을 피해 간다. NUL은 Postgres에 넣을 수 없다.
-    """
-    if any(unicodedata.category(ch) == "Cc" for ch in name):
-        raise ValueError("과목 이름에 쓸 수 없는 문자가 있어요.")
-    return unicodedata.normalize("NFC", name)
-
-
 SubjectName = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
-    AfterValidator(_clean_name),
+    AfterValidator(clean_text),
 ]
 
 
