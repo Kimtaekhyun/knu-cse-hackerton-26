@@ -116,11 +116,15 @@ struct StickerCard: View {
         }
     }
 
-    /// 끌어다 놓을 때 건네는 내용. 텍스트 보기면 글자, 손글씨 보기면 사진 조각.
+    /// 끌어다 놓을 때 건네는 내용. 텍스트 보기면 글자(수식이 있으면 그린 그림), 손글씨 보기면 사진 조각.
     private func dragItem() -> NSItemProvider {
         // 굿노트로 옮긴 카드는 "옮김" 표시 (#99)
         CardAPI.markMovedQuietly([sticker])
-        guard handwriting else { return NSItemProvider(object: sticker.text as NSString) }
+        guard handwriting else {
+            // 굿노트는 LaTeX를 그리지 못해서, 수식이 있는 카드는 화면에 보이는 모양을 그림으로 넘겨요 (#113)
+            if sticker.text.contains("$"), let image = mathPiece() { return NSItemProvider(object: image) }
+            return NSItemProvider(object: sticker.text as NSString)
+        }
         let renderer = ImageRenderer(content: inkPiece)
         renderer.scale = 3
         #if os(iOS) || os(visionOS)
@@ -129,6 +133,17 @@ struct StickerCard: View {
         if let image = renderer.nsImage { return NSItemProvider(object: image) }
         #endif
         return NSItemProvider(object: sticker.text as NSString)
+    }
+
+    /// 텍스트 보기 그대로 그린 그림 (배경 투명). 그리기에 실패하면 nil.
+    private func mathPiece() -> UIImage? {
+        let renderer = ImageRenderer(content:
+            MathText(text: sticker.text, size: 20, weight: .medium, lineGap: 20 * 1.45 - 24)
+                .frame(width: width - 40, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        )
+        renderer.scale = 3
+        return renderer.uiImage
     }
 
     /// 원본 사진에서 이 카드 자리 전체를 잘라 낸 조각
