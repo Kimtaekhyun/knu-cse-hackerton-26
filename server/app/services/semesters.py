@@ -5,7 +5,7 @@
 
 import uuid
 from collections.abc import Iterable
-from datetime import time
+from datetime import date, datetime, time
 
 from fastapi import HTTPException
 from sqlalchemy import func, select, update
@@ -27,6 +27,7 @@ from app.schemas.semester import (
     SubjectIn,
     SubjectOut,
 )
+from app.services.queries import SEOUL
 
 TERM_LABELS = {
     SemesterTerm.first: "1학기",
@@ -34,6 +35,34 @@ TERM_LABELS = {
     SemesterTerm.second: "2학기",
     SemesterTerm.winter: "겨울학기",
 }
+
+
+def label(year: int, term: SemesterTerm) -> str:
+    """화면에 보여 줄 학기 이름 (예: "2026년 2학기")"""
+    return f"{year}년 {TERM_LABELS[term]}"
+
+
+# ---------- 날짜로 학기 정하기 ----------
+
+
+def today() -> date:
+    """오늘(서울 날짜). 테스트에서 날짜를 정할 때 바꿔 끼운다"""
+    return datetime.now(SEOUL).date()
+
+
+def term_of(day: date) -> tuple[int, SemesterTerm]:
+    """날짜가 속한 (학년도, 학기). 1 · 2월은 지난해 겨울학기다
+
+    3~6월 1학기 · 7~8월 여름학기 · 9~12월 2학기 · 다음 해 1~2월 겨울학기.
+    앱 학기 선택 휠의 처음 값(GET /semesters/suggested)과 판서 자동 분류가 같은 규칙을 쓴다.
+    """
+    if day.month <= 2:
+        return day.year - 1, SemesterTerm.winter
+    if day.month <= 6:
+        return day.year, SemesterTerm.first
+    if day.month <= 8:
+        return day.year, SemesterTerm.summer
+    return day.year, SemesterTerm.second
 
 
 # ---------- 찾기 (남의 것은 없는 것으로 본다: 404) ----------
@@ -106,12 +135,64 @@ def create_semester(
     db: Session, user: User, year: int, term: SemesterTerm, make_current: bool
 ) -> Semester:
     if semester_exists(db, user, year, term):
-        raise HTTPException(409, f"{year}년 {TERM_LABELS[term]}은 이미 있어요.")
+        # 학기 이름이 모두 모음(…학기)으로 끝나서 조사는 "는"
+        raise HTTPException(409, f"{label(year, term)}는 이미 있어요.")
     semester = Semester(user_id=user.id, year=year, term=term, is_current=False)
     db.add(semester)
     db.flush()
     if make_current:
         set_current(db, user, semester)
+    return semester
+
+
+def _find_or_create(db: Session, user: User, year: int, term: SemesterTerm) -> Semester:
+    """(year, term) 학기. 없으면 만든다 (현재 학기 지정은 부르는 쪽에서)"""
+    semester = db.scalars(
+        select(Semester)
+        .where(Semester.user_id == user.id, Semester.year == year, Semester.term == term)
+        .options(selectinload(Semester.subjects).selectinload(Subject.slots))
+    ).first()
+    if semester is None:
+        semester = Semester(user_id=user.id, year=year, term=term, is_current=False, subjects=[])
+        db.add(semester)
+        db.flush()
+    return semester
+
+
+def ensure_current_semester(db: Session, user: User, day: date) -> uuid.UUID:
+    """현재 학기 id. 없으면 day가 속한 학기를 현재 학기로 만든다
+
+    시간표 등록을 "나중에 할게요"로 건너뛴 사용자는 학기가 하나도 없다.
+    판서는 학기가 꼭 있어야 저장되므로, 그대로 두면 찍은 사진을 거절하게 된다.
+    같은 학기가 이미 있으면(현재 학기만 해제된 경우) 새로 만들지 않고 그 학기를 현재로 지정한다.
+    시간표가 없으니 이렇게 저장한 판서는 미분류함으로 간다.
+    """
+    current = db.scalar(select(Semester.id).where(Semester.user_id == user.id, Semester.is_current))
+    if current is not None:
+        return current
+    semester = _find_or_create(db, user, *term_of(day))
+    set_current(db, user, semester)
+    return semester.id
+
+
+def save_timetable_for_term(
+    db: Session,
+    user: User,
+    year: int,
+    term: SemesterTerm,
+    subjects: list[SubjectIn],
+    make_current: bool,
+) -> Semester:
+    """고른 학기에 시간표를 저장한다. 학기가 없으면 만든다 (가입 후 첫 등록 · 새 학기 추가)
+
+    학기 만들기 · 현재 학기 지정 · 과목 저장이 같은 트랜잭션이라,
+    중간에 실패하면 아무것도 남지 않는다.
+    같은 요청을 다시 보내도 결과가 같다 (학기가 두 개 생기지 않고 409도 나지 않는다).
+    """
+    semester = _find_or_create(db, user, year, term)
+    if make_current:
+        set_current(db, user, semester)
+    save_timetable(db, semester, subjects)
     return semester
 
 
@@ -216,7 +297,7 @@ def semester_outs(db: Session, semesters: list[Semester]) -> list[SemesterOut]:
             id=s.id,
             year=s.year,
             term=s.term,
-            label=f"{s.year}년 {TERM_LABELS[s.term]}",
+            label=label(s.year, s.term),
             is_current=s.is_current,
             subject_count=subject_counts.get(s.id, 0),
             capture_count=capture_counts.get(s.id, 0),

@@ -10,16 +10,16 @@
 """
 
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 
 from fastapi import HTTPException
 from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
-from app.models import Capture, CaptureStatus, Card, Semester, SemesterTerm, User
+from app.models import Capture, CaptureStatus, Card, Semester, User
 from app.schemas.capture import CaptureDetail, CaptureOut, CardOut, Destination
 from app.services import queries
-from app.services.semesters import get_subject, set_current
+from app.services.semesters import ensure_current_semester, get_subject
 from app.storage import local as storage
 
 SEOUL = queries.SEOUL
@@ -90,45 +90,6 @@ def classify(
     semester_id = ensure_current_semester(db, user, datetime.now(SEOUL).date())
     slot = queries.current_slot(db, user.id, taken_at)
     return semester_id, slot.subject_id if slot else None
-
-
-def term_of(day: date) -> tuple[int, SemesterTerm]:
-    """날짜가 속한 (학년도, 학기). 1 · 2월은 지난해 겨울학기다
-
-    3~6월 1학기 · 7~8월 여름학기 · 9~12월 2학기 · 다음 해 1~2월 겨울학기.
-    """
-    if day.month <= 2:
-        return day.year - 1, SemesterTerm.winter
-    if day.month <= 6:
-        return day.year, SemesterTerm.first
-    if day.month <= 8:
-        return day.year, SemesterTerm.summer
-    return day.year, SemesterTerm.second
-
-
-def ensure_current_semester(db: Session, user: User, today: date) -> uuid.UUID:
-    """현재 학기 id. 없으면 오늘이 속한 학기를 현재 학기로 만든다
-
-    시간표 등록을 "나중에 할게요"로 건너뛴 사용자는 학기가 하나도 없다.
-    판서는 학기가 꼭 있어야 저장되므로, 그대로 두면 찍은 사진을 거절하게 된다.
-    같은 학기가 이미 있으면(현재 학기만 해제된 경우) 새로 만들지 않고 그 학기를 현재로 지정한다.
-    시간표가 없으니 이렇게 저장한 판서는 미분류함으로 간다.
-    """
-    current = db.scalar(select(Semester.id).where(Semester.user_id == user.id, Semester.is_current))
-    if current is not None:
-        return current
-    year, term = term_of(today)
-    semester = db.scalars(
-        select(Semester).where(
-            Semester.user_id == user.id, Semester.year == year, Semester.term == term
-        )
-    ).first()
-    if semester is None:
-        semester = Semester(user_id=user.id, year=year, term=term, is_current=False)
-        db.add(semester)
-        db.flush()
-    set_current(db, user, semester)
-    return semester.id
 
 
 def create_capture(

@@ -8,7 +8,8 @@ from sqlalchemy import func, select
 
 from app.core.config import get_settings
 from app.models import Capture, CaptureStatus, Card, Semester, SemesterTerm
-from app.services.captures import SEOUL, capture_dir, rectified_key, term_of
+from app.services.captures import SEOUL, capture_dir, rectified_key
+from app.services.semesters import term_of
 from app.storage import local as storage
 from tests.api.conftest import bearer
 from tests.db.factories import (

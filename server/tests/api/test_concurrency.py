@@ -14,6 +14,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
+from app.core.security import read_access_token
 from app.db.session import get_db
 from app.main import app
 from app.models import Capture, Semester, Subject, User
@@ -125,3 +126,19 @@ def test_same_capture_resent_at_once(live, tmp_path, monkeypatch):
     assert sorted(codes) == [200] * (N - 1) + [202]
     with Session() as session:
         assert session.scalar(select(func.count()).where(Capture.id == capture_id)) == 1
+
+
+def test_term_timetable_saved_at_once_creates_one_semester(live):
+    """학기가 없는 사용자가 "이대로 저장"을 여러 번 눌러도 학기는 하나만 생긴다 (#76)"""
+    client, auth, Session = live
+    user_id = read_access_token(auth["Authorization"].removeprefix("Bearer "))
+    body = {"year": 2026, "term": "second", "subjects": [{"name": "자료구조"}]}
+
+    codes = at_once(lambda: client.put("/api/v1/semesters/timetable", json=body, headers=auth))
+    assert codes == [200] * N
+    with Session() as session:
+        semesters = session.scalars(select(Semester).where(Semester.user_id == user_id)).all()
+        assert len(semesters) == 1
+        assert semesters[0].is_current
+        names = session.scalars(select(Subject.name).where(Subject.semester_id == semesters[0].id))
+        assert list(names) == ["자료구조"]
