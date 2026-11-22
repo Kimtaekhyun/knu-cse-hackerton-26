@@ -65,6 +65,8 @@ struct AccountScreen: View {
                 row("시간표 수정", chevron: true) {
                     // 새 사진 없이 열면 06 이 서버의 현재 학기 과목을 불러와요.
                     router.timetableImage = nil
+                    router.timetableManual = false
+                    router.semester = nil
                     router.push(.timetableConfirm)
                 }
             }

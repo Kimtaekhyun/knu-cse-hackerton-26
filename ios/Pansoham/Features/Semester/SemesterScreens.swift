@@ -105,7 +105,7 @@ struct AllSemestersScreen: View {
     var addCard: some View {
         SubjectCard(name: "새 학기 추가", detail: "에브리타임 시간표 올리기",
                     count: 0, style: .dashed, width: 260, symbol: "+") {
-            router.push(.timetableUpload)
+            router.startNewSemester()
         }
     }
 }

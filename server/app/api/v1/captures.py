@@ -37,6 +37,8 @@ def read_image(image: UploadFile) -> tuple[bytes, str]:
     return data, extension
 
 
+# 202: 요청은 받았고, 처리는 아직이란 뜻.
+# (AI 처리는 10초 이상 걸릴수있고, 요청 하나로 끝까지 기다리는 앱의 요청이 시간초과로 끊김)
 @router.post("", response_model=CaptureDetail, status_code=202)
 def upload(
     response: Response,

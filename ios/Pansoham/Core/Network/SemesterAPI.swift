@@ -35,6 +35,9 @@ enum SemesterAPI {
 
     struct SemesterDTO: Decodable, Hashable, Identifiable {
         let id: UUID
+        let year: Int
+        /// "first" · "second" · "summer" · "winter"
+        let term: String
         /// "2026년 2학기"
         let label: String
         let isCurrent: Bool
@@ -43,8 +46,11 @@ enum SemesterAPI {
         /// 학기 하나를 열었을 때만 와요
         let subjects: [SubjectDTO]?
 
+        /// 06 학기 고르기에 넣을 모양
+        var semester: Semester? { Semester.Term(rawValue: term).map { Semester(year: year, term: $0) } }
+
         enum CodingKeys: String, CodingKey {
-            case id, label, subjects
+            case id, year, term, label, subjects
             case isCurrent = "is_current"
             case subjectCount = "subject_count"
             case captureCount = "capture_count"
@@ -89,13 +95,12 @@ enum SemesterAPI {
                                      as: SemesterDTO.self)
     }
 
-    /// 06 `이대로 저장`. 오늘 날짜 기준 학기를 찾거나 만들어 현재 학기로 두고, 과목 목록을 통째로 저장해요.
+    /// 06 `이대로 저장`. 06 에서 고른 학기를 찾거나 만들어 현재 학기로 두고, 과목 목록을 통째로 저장해요.
     @discardableResult
-    static func saveTimetable(_ subjects: [TimetableSubject], on date: Date = .now) async throws -> SemesterDTO {
-        let (year, term) = termOf(date)
-        let label = "\(year)년 \(termLabel(term))"
+    static func saveTimetable(_ subjects: [TimetableSubject], semester: Semester) async throws -> SemesterDTO {
+        let year = semester.year, term = semester.term.rawValue
         let semesterID: UUID
-        if let existing = try await list().first(where: { $0.label == label }) {
+        if let existing = try await list().first(where: { $0.year == year && $0.term == term }) {
             semesterID = existing.id
             if !existing.isCurrent { try await makeCurrent(existing.id) }
         } else {
@@ -110,20 +115,5 @@ enum SemesterAPI {
         })
         return try await APIClient.json("PUT", path: "api/v1/semesters/\(semesterID.uuidString)/timetable",
                                         body: body, as: SemesterDTO.self)
-    }
-
-    /// 3~8월은 1학기, 9~2월은 2학기 (1 · 2월은 지난해 2학기)
-    static func termOf(_ date: Date) -> (year: Int, term: String) {
-        let parts = Calendar.current.dateComponents([.year, .month], from: date)
-        let year = parts.year ?? 2026, month = parts.month ?? 9
-        switch month {
-        case 3...8: return (year, "first")
-        case 1...2: return (year - 1, "second")
-        default: return (year, "second")
-        }
-    }
-
-    private static func termLabel(_ term: String) -> String {
-        ["first": "1학기", "summer": "여름학기", "second": "2학기", "winter": "겨울학기"][term] ?? term
     }
 }

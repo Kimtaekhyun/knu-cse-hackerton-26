@@ -155,13 +155,22 @@ extension NavBar where Trailing == EmptyView {
 
 // MARK: - 아래 막대 (왼쪽 설명 · 오른쪽 버튼)
 
-struct BottomBar<Trailing: View>: View {
+/// 아래 막대. `accessory` 는 설명 글자 바로 옆에 붙는 버튼 자리 (없으면 비워요).
+struct BottomBar<Trailing: View, Accessory: View>: View {
     let caption: String
-    @ViewBuilder var trailing: Trailing
+    var accessory: Accessory
+    var trailing: Trailing
+
+    init(caption: String, @ViewBuilder accessory: () -> Accessory, @ViewBuilder trailing: () -> Trailing) {
+        self.caption = caption
+        self.accessory = accessory()
+        self.trailing = trailing()
+    }
 
     var body: some View {
-        HStack {
+        HStack(spacing: 20) {
             Text(caption).ds(17, .medium, .dsSub)
+            accessory
             Spacer()
             trailing
         }
@@ -171,6 +180,12 @@ struct BottomBar<Trailing: View>: View {
             Rectangle().fill(Color.dsLine).frame(height: 1)
         }
         .at(0, 730)
+    }
+}
+
+extension BottomBar where Accessory == EmptyView {
+    init(caption: String, @ViewBuilder trailing: () -> Trailing) {
+        self.init(caption: caption, accessory: { EmptyView() }, trailing: trailing)
     }
 }
 

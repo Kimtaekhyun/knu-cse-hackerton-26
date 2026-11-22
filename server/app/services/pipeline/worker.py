@@ -79,7 +79,7 @@ def process_capture(
             storage.save(rectified_key(capture_id), jpeg)
             capture.rectified_key = rectified_key(capture_id)
 
-            set_status(db, capture, CaptureStatus.segmenting)
+            set_status(db, capture, CaptureStatus.segmenting)  # 각 단계별로 지정해서 status update
             try:
                 regions, info = ask_regions(jpeg)
             except LLMError as error:
@@ -101,6 +101,7 @@ def process_capture(
             mark_failed(db, capture_id, "unknown")
 
 
+#  워커가 단계마다 set_status()로 커밋하므로 다른 요청(GET)에서도 지금 단계가 보임
 def set_status(db: Session, capture: Capture, status: CaptureStatus) -> None:
     capture.status = status
     db.commit()
@@ -183,6 +184,10 @@ def mark_failed(db: Session, capture_id: uuid.UUID, reason: str) -> None:
 
 # ---------- 작업 줄 ----------
 
+"""
+    ThreadPoolExecutor(max_workers=1)는 작업 스레드 1개와 작업 대기 줄(큐)로 이루어짐. 
+    - enqueue로 큐에 넣기만 하고 바로 리턴되어 원래 위치로 옴. 
+"""
 _executor: ThreadPoolExecutor | None = None
 _executor_lock = threading.Lock()
 
