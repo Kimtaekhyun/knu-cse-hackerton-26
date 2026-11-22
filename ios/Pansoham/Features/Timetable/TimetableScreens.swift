@@ -210,8 +210,9 @@ struct TimetableConfirmScreen: View {
             photoBox(height: 452).at(48, 210)
 
             // 시간표 목록. 과목이 많으면 아래 막대(y 730) 위까지만 보이고 스크롤돼요.
-            ScrollView { subjectList(width: 655) }
-                .frame(width: 655, height: 730 - 210, alignment: .topLeading)
+            // 스크롤 막대가 삭제 버튼과 겹치지 않게 목록 오른쪽에 여백(scrollGutter)을 두고 그 안에 막대가 나와요.
+            ScrollView { subjectList(width: 655).frame(width: 655 + Self.scrollGutter, alignment: .leading) }
+                .frame(width: 655 + Self.scrollGutter, height: 730 - 210, alignment: .topLeading)
                 .at(491, 210)
 
             BottomBar(caption: caption) {
@@ -221,6 +222,9 @@ struct TimetableConfirmScreen: View {
             }
         }
     }
+
+    /// 목록 오른쪽 스크롤 막대 자리 (삭제 버튼과 겹치지 않게)
+    static let scrollGutter: CGFloat = 20
 
     /// 원본 시간표 사진. 에브리타임 '이미지로 저장' 은 주말 수업 유무와 관계없이 1158 × 1275 라
     /// 박스를 그 비율로 두고 사진을 비율 그대로 맞춰요. 누르면 크게 보여 줘요.
@@ -565,8 +569,8 @@ extension TimetableConfirmScreen {
                     .background(Color.dsPanel, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .at(48, 204)
 
-                ScrollView { subjectList(width: 738) }
-                    .frame(width: 738, height: 1090 - 632, alignment: .topLeading)
+                ScrollView { subjectList(width: 738).frame(width: 738 + Self.scrollGutter, alignment: .leading) }
+                    .frame(width: 738 + Self.scrollGutter, height: 1090 - 632, alignment: .topLeading)
                     .at(48, 632)
 
                 PortraitBottomBar(caption: caption) {
