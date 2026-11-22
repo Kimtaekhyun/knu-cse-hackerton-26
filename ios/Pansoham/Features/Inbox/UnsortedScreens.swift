@@ -188,47 +188,49 @@ struct UnsortedScreen: View {
             }
             SubjectHeader(name: "미분류함", detail: headerDetail)
 
-            // 미분류 목록
-            VStack(alignment: .leading, spacing: 0) {
-                if shownItems.isEmpty && !items.isEmpty { NoSearchResult(query: query) }
-                ForEach(shownItems) { item in
-                    HStack(spacing: 20) {
-                        Button { open(item) } label: {
-                            HStack(spacing: 20) {
-                                thumb(item)
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(item.date).ds(20, .bold)
-                                    Text(item.detail).ds(15, .regular, .dsSub)
+            // 미분류 목록. 판서가 많으면 스크롤돼요 (과목 폴더 15 와 같은 방식)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    if shownItems.isEmpty && !items.isEmpty { NoSearchResult(query: query) }
+                    ForEach(shownItems) { item in
+                        HStack(spacing: 20) {
+                            Button { open(item) } label: {
+                                HStack(spacing: 20) {
+                                    thumb(item)
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(item.date).ds(20, .bold)
+                                        Text(item.detail).ds(15, .regular, .dsSub)
+                                    }
+                                    Spacer(minLength: 0)
                                 }
-                                Spacer(minLength: 0)
+                                .contentShape(Rectangle())
                             }
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
+                            deleteButton(item, width: 88, height: 48, size: 16, radius: 14)
+                            Button {
+                                target = firstSubject
+                                withAnimation(.easeOut(duration: 0.3)) { moving = item }
+                            } label: {
+                                Text("과목으로 옮기기").ds(16, .bold)
+                                    .frame(width: 180, height: 48)
+                                    .background(Color.white)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .stroke(Color.black.opacity(0.12), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                        deleteButton(item, width: 88, height: 48, size: 16, radius: 14)
-                        Button {
-                            target = firstSubject
-                            withAnimation(.easeOut(duration: 0.3)) { moving = item }
-                        } label: {
-                            Text("과목으로 옮기기").ds(16, .bold)
-                                .frame(width: 180, height: 48)
-                                .background(Color.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(Color.black.opacity(0.12), lineWidth: 1))
+                        .padding(.vertical, 20)
+                        .frame(width: 1098)
+                        .overlay(alignment: .bottom) {
+                            if item != items.last { Rectangle().fill(Color.dsLine).frame(height: 1) }
                         }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.vertical, 20)
-                    .frame(width: 1098)
-                    .overlay(alignment: .bottom) {
-                        if item != items.last { Rectangle().fill(Color.dsLine).frame(height: 1) }
                     }
                 }
+                .padding(.bottom, 40)
             }
+            .frame(width: 1098, height: DS.height - 196, alignment: .top)
             .at(48, 196)
-
-            CaptureFAB { router.push(.capture) }
 
             if let moving {
                 // 어둡게 깔기
@@ -348,11 +350,8 @@ extension UnsortedScreen {
                     }
                 }
             }
-            .padding(.bottom, 80)
+            .padding(.bottom, 24)
         }, bottom: { EmptyView() })
-        .overlay(alignment: .bottomTrailing) {
-            NarrowFAB { router.push(.capture) }.padding(20)
-        }
         .overlay {
             if let moving {
                 ZStack {
