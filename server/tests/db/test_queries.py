@@ -112,6 +112,37 @@ def test_weekly_counts_use_seoul_date(db):
     assert counts == expected
 
 
+def test_weekly_counts_skip_unfinished_captures(db):
+    user = make_user(db)
+    semester = make_semester(db, user)
+    for status in [CaptureStatus.done, CaptureStatus.failed, CaptureStatus.interpreting]:
+        make_capture(db, user, semester, status=status)  # 모두 11/18
+    counts = queries.weekly_capture_counts(db, user.id, date(2026, 11, 16))
+    assert counts[date(2026, 11, 18)] == 1
+
+
+def test_today_slots_current_semester_in_start_order(db):
+    user = make_user(db)
+    semester = make_semester(db, user)
+    late = make_slot(db, make_subject(db, semester, "컴퓨터구조"), 1, "13:00", "14:30")
+    early = make_slot(db, make_subject(db, semester, "자료구조"), 1, "10:30", "12:00")
+    make_slot(db, make_subject(db, semester, "이산수학"), 2, "10:30", "12:00")  # 다른 요일
+    past = make_semester(db, user, year=2025, is_current=False)
+    make_slot(db, make_subject(db, past, "지난 과목"), 1, "09:00", "10:00")
+    slots = queries.today_slots(db, user.id, 1)
+    assert [s.id for s in slots] == [early.id, late.id]
+    assert [s.subject.name for s in slots] == ["자료구조", "컴퓨터구조"]
+
+
+def test_done_capture_count(db):
+    user = make_user(db)
+    semester = make_semester(db, user)
+    make_capture(db, user, semester)
+    make_capture(db, user, semester, status=CaptureStatus.failed)
+    make_capture(db, make_user(db), semester)  # 다른 사용자
+    assert queries.done_capture_count(db, user.id) == 1
+
+
 def test_current_calendar_joins_school(db):
     user = make_user(db, school="경북대학교")
     make_semester(db, user)  # 2026 2학기, 현재 학기
