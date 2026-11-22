@@ -53,6 +53,10 @@ struct UnsortedScreen: View {
     @State private var query = ""
     @State private var movingNow = false
     @State private var moveError: String?
+    /// 지울 판서 (확인 창) · 삭제 중 · 실패 (#93)
+    @State private var deletingItem: Item?
+    @State private var deletingNow = false
+    @State private var deleteError: String?
     private var shownItems: [Item] { items.filter { matches(query, [$0.date, $0.detail]) } }
 
     /// 옮길 과목: 로그인했으면 현재 학기 과목, 아니면 샘플
@@ -102,6 +106,38 @@ struct UnsortedScreen: View {
         }
     }
 
+    /// 판서 지우기. 서버 판서면 `DELETE /captures/{id}` 뒤에 목록에서 빼요 (#93).
+    private func delete(_ item: Item) {
+        guard isLive, let id = item.captureID else {
+            withAnimation(.easeInOut(duration: 0.25)) { samples.removeAll { $0.id == item.id } }
+            deletingItem = nil
+            return
+        }
+        deletingNow = true
+        Task {
+            defer { deletingNow = false; deletingItem = nil }
+            do {
+                try await SubjectCaptures.delete([id])
+            } catch {
+                deleteError = error.localizedDescription
+            }
+        }
+    }
+
+    /// 줄마다 "삭제" 버튼 (19-1)
+    private func deleteButton(_ item: Item, width: CGFloat, height: CGFloat, size: CGFloat, radius: CGFloat) -> some View {
+        Button { deletingItem = item } label: {
+            Text(deletingNow && deletingItem == item ? "삭제 중…" : "삭제").ds(size, .bold, .dsSub)
+                .frame(width: width, height: height)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(Color.black.opacity(0.12), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(deletingNow)
+    }
+
     /// 고른 과목으로 옮기기. 서버 판서면 `PATCH /captures/{id}` 뒤에 목록에서 빼요.
     private func move(_ item: Item) {
         guard isLive, let id = item.captureID else {
@@ -130,6 +166,14 @@ struct UnsortedScreen: View {
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
             .task { await reload() }
+            .alert("판서를 삭제할까요?", isPresented: Binding(get: { deletingItem != nil && !deletingNow },
+                                                         set: { if !$0, !deletingNow { deletingItem = nil } })) {
+                Button("취소", role: .cancel) { deletingItem = nil }
+                Button("삭제", role: .destructive) { if let item = deletingItem { delete(item) } }
+            } message: {
+                Text("카드 \(deletingItem?.cards ?? 0)개도 함께 지워지고 되돌릴 수 없어요.")
+            }
+            .deleteFailedAlert($deleteError)
             .alert("옮기지 못했어요", isPresented: Binding(get: { moveError != nil }, set: { if !$0 { moveError = nil } })) {
                 Button("확인", role: .cancel) {}
             } message: {
@@ -161,6 +205,7 @@ struct UnsortedScreen: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        deleteButton(item, width: 88, height: 48, size: 16, radius: 14)
                         Button {
                             target = firstSubject
                             withAnimation(.easeOut(duration: 0.3)) { moving = item }
@@ -277,6 +322,8 @@ extension UnsortedScreen {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(item.date).dsWrap(17, .bold)
                             Text(item.detail).dsWrap(14, .regular, .dsSub)
+                            HStack(spacing: 8) {
+                            deleteButton(item, width: 64, height: 38, size: 14, radius: 12)
                             Button {
                                 target = firstSubject
                                 withAnimation(.easeOut(duration: 0.3)) { moving = item }
@@ -290,6 +337,7 @@ extension UnsortedScreen {
                                         .stroke(Color.black.opacity(0.12), lineWidth: 1))
                             }
                             .buttonStyle(.plain)
+                            }
                             .padding(.top, 4)
                         }
                         Spacer(minLength: 0)

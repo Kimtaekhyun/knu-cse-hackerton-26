@@ -273,7 +273,21 @@ struct SubjectLessonsScreen: View {
         var note: String? = nil
         /// 결과 화면에 넘길 판서
         var jobs: [CaptureFlow.Job] = []
+        /// 이 수업의 서버 판서 id (삭제용)
+        var captureIDs: [UUID] = []
+
+        /// 요약("사진 2장 · 카드 5개")의 숫자
+        var counts: (photos: Int, cards: Int) {
+            let numbers = summary.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+            return (numbers.first ?? 0, numbers.dropFirst().first ?? 0)
+        }
     }
+
+    /// 지울 수업 (확인 창) · 삭제 중 · 실패 · 지운 샘플 (#93)
+    @State private var deletingLesson: Lesson?
+    @State private var deletingNow = false
+    @State private var deleteError: String?
+    @State private var hiddenSamples: Set<Int> = []
 
     @State private var searching = false
     @State private var query = ""
@@ -281,13 +295,13 @@ struct SubjectLessonsScreen: View {
     /// 서버 판서를 보여 주는지 (로그인 + 실제 과목)
     private var isLive: Bool { store.isLive(router.subject) }
     private var allLessons: [Lesson] {
-        guard isLive else { return lessons }
+        guard isLive else { return lessons.filter { !hiddenSamples.contains($0.id) } }
         return store.lessons.enumerated().map { index, lesson in
             let tags = lesson.tags
             return Lesson(id: index, date: lesson.title, summary: lesson.summary, today: lesson.isToday,
                           thumbs: [], tags: tags.shown, more: tags.more,
                           photos: lesson.items.compactMap(\.photo), note: lesson.statusNote,
-                          jobs: lesson.items.compactMap(\.job))
+                          jobs: lesson.items.compactMap(\.job), captureIDs: lesson.items.map(\.id))
         }
     }
     private var shownLessons: [Lesson] { allLessons.filter { matches(query, [$0.date] + $0.tags) } }
@@ -305,7 +319,7 @@ struct SubjectLessonsScreen: View {
     ]
 
     var body: some View {
-        Adaptive { wide } narrow: { narrow($0) }
+        lessonDeleteAlert(Adaptive { wide } narrow: { narrow($0) })
     }
 
     private var wide: some View {
@@ -325,6 +339,7 @@ struct SubjectLessonsScreen: View {
                     ForEach(shownLessons) { lesson in
                         Button { open(lesson) } label: { row(lesson) }
                             .buttonStyle(.plain)
+                            .contextMenu { deleteMenu(lesson) }
                     }
                 }
                 .padding(.bottom, 120)
@@ -341,6 +356,50 @@ struct SubjectLessonsScreen: View {
             CaptureFAB { router.push(.capture) }
         }
         .task { await reload() }
+        
+    }
+
+    /// 수업 줄 길게 누르기 메뉴 (15-1)
+    @ViewBuilder
+    private func deleteMenu(_ lesson: Lesson) -> some View {
+        Button(role: .destructive) { deletingLesson = lesson } label: {
+            Label("이 날 판서 모두 삭제", systemImage: "trash")
+        }
+    }
+
+    /// 수업 지우기 확인 창 (15-2)
+    func lessonDeleteAlert<V: View>(_ view: V) -> some View {
+        let lesson = deletingLesson
+        let counts = lesson?.counts ?? (photos: 0, cards: 0)
+        return view
+            .alert("\(lesson?.date ?? "") 판서 \(counts.photos)장을 삭제할까요?",
+                   isPresented: Binding(get: { lesson != nil && !deletingNow },
+                                        set: { if !$0, !deletingNow { deletingLesson = nil } })) {
+                Button("취소", role: .cancel) { deletingLesson = nil }
+                Button("삭제", role: .destructive) { if let lesson { delete(lesson) } }
+            } message: {
+                Text("카드 \(counts.cards)개도 함께 지워지고 되돌릴 수 없어요.")
+            }
+            .deleteFailedAlert($deleteError)
+    }
+
+    /// 그날 판서 모두 지우기. 다 지워지면 빈 폴더(18)로 바꿔요 (#93)
+    private func delete(_ lesson: Lesson) {
+        guard isLive else {
+            withAnimation(.easeInOut(duration: 0.25)) { _ = hiddenSamples.insert(lesson.id) }
+            deletingLesson = nil
+            return
+        }
+        deletingNow = true
+        Task {
+            defer { deletingNow = false; deletingLesson = nil }
+            do {
+                try await SubjectCaptures.delete(lesson.captureIDs)
+            } catch {
+                deleteError = error.localizedDescription
+            }
+            await reload()
+        }
     }
 
     /// 판서 · 수업을 누르면: 서버 판서면 그 판서들의 결과 화면, 샘플이면 샘플 결과
@@ -664,6 +723,7 @@ extension SubjectLessonsScreen {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .contextMenu { deleteMenu(lesson) }
                 }
             }
             .padding(.bottom, 80)
@@ -672,6 +732,7 @@ extension SubjectLessonsScreen {
             NarrowFAB { router.push(.capture) }.padding(20)
         }
         .task { await reload() }
+        
     }
 }
 

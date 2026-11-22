@@ -98,6 +98,11 @@ enum SemesterAPI {
                                      as: SemesterDTO.self)
     }
 
+    /// 학기 지우기 (#93). 과목 · 판서도 함께 지워져요.
+    static func delete(_ id: UUID) async throws {
+        try await APIClient.raw("DELETE", path: "api/v1/semesters/\(id.uuidString)")
+    }
+
     /// 오늘 날짜 기준 기본 학기 (06 학기 선택의 처음 값). 못 부르면 앱 규칙(`Semester.current()`)으로.
     static func suggested() async -> Semester {
         guard AuthSession.shared.isLoggedIn,
