@@ -49,6 +49,25 @@ def test_drops_slot_collapsed_by_snapping():
     assert result[0].slots == []
 
 
+def test_late_end_rounded_to_midnight_becomes_2359():
+    # 23:50은 30분 반올림으로 24:00이 되지만 저장 API는 24:00을 받지 못한다
+    result = run([b("야간 실습", 2, "22:30", "23:50"), b("심야", 3, "23:00", "23:45")])
+    assert slots(result[0]) == [(2, "22:30", "23:59")]
+    assert slots(result[1]) == [(3, "23:00", "23:59")]
+
+
+def test_slot_starting_at_midnight_is_dropped():
+    # 23:45 시작은 24:00이 되어 시작 ≥ 끝 → 그 칸만 버리고 과목은 남긴다
+    result = run([b("D", 4, "23:45", "23:59")])
+    assert [s.name for s in result] == ["D"]
+    assert result[0].slots == []
+
+
+def test_late_slots_still_merge():
+    result = run([b("E", 1, "22:00", "23:00"), b("E", 1, "23:00", "23:55")])
+    assert slots(result[0]) == [(1, "22:00", "23:59")]
+
+
 def test_invalid_slot_keeps_subject():
     result = run(
         [
