@@ -145,7 +145,10 @@ struct PastSemesterScreen: View {
 
     /// 과목 폴더 열기
     func open(_ index: Int) {
-        let subject = subjects[index]
+        // 누르는 사이 목록이 바뀌었을 수 있어 범위를 확인해요 (#87)
+        let list = subjects
+        guard list.indices.contains(index) else { return }
+        let subject = list[index]
         router.subject = subject.dto
         router.push(subject.dto?.captureCount == 0 ? .subjectEmpty : .subjectLessons)
     }
@@ -211,9 +214,11 @@ extension AllSemestersScreen {
                           title: "전체 학기",
                           detail: "학기가 바뀌면 새 시간표를 올려 주세요. 그 학기의 과목 폴더가 만들어져요.",
                           trailing: { EmptyView() }, content: {
-            NarrowGrid(count: semesters.count + 1) { index in
+            // 목록은 한 번만 꺼내 개수와 내용을 같은 값으로 써요 (#87)
+            let items = semesters
+            NarrowGrid(count: items.count + 1) { index in
                 Group {
-                    if index < semesters.count { semesterCard(semesters[index]) } else { addCard }
+                    if index < items.count { semesterCard(items[index]) } else { addCard }
                 }
                 .scaledBox(260, 166, to: cardWidth)
                 .entrance(appeared, delay: 0.1 + 0.07 * Double(min(index, 6)), duration: 0.4, y: 16)
@@ -229,8 +234,10 @@ extension PastSemesterScreen {
         return NarrowPage(backTitle: "전체 학기", onBack: { router.pop() },
                           title: title, detail: detail,
                           trailing: { trailingAction(15) }, content: {
-            NarrowGrid(count: subjects.count) { index in
-                let subject = subjects[index]
+            // 목록은 한 번만 꺼내 개수와 내용을 같은 값으로 써요 (#87)
+            let items = subjects
+            NarrowGrid(count: items.count) { index in
+                let subject = items[index]
                 SubjectCard(name: subject.name, detail: subject.time, count: subject.count, width: 260) {
                     open(index)
                 }
