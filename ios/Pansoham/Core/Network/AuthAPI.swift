@@ -16,6 +16,20 @@ enum AuthAPI {
         let name: String
         let email: String?
         let school: String?
+        /// 알림 설정 (#109)
+        let settings: SettingsDTO?
+    }
+
+    /// 알림 켜짐 · 꺼짐. 알림 예약은 앱이 하고 서버는 값만 저장해요.
+    struct SettingsDTO: Codable, Equatable {
+        /// 옮기지 않은 판서 알림
+        var notifyUnmoved: Bool
+        /// 시험 기간 알림
+        var notifyExam: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case notifyUnmoved = "notify_unmoved", notifyExam = "notify_exam"
+        }
     }
 
     struct LoginResponse: Decodable {
@@ -46,6 +60,14 @@ enum AuthAPI {
     /// 내 정보. 저장된 토큰이 아직 유효한지 확인할 때 써요.
     static func me() async throws -> UserDTO {
         try await APIClient.json("GET", path: "api/v1/me", as: UserDTO.self)
+    }
+
+    /// 알림 설정 저장 (#109). 보낸 칸만 바꿔요.
+    static func updateSettings(notifyUnmoved: Bool? = nil, notifyExam: Bool? = nil) async throws -> SettingsDTO {
+        struct Body: Encodable { let notify_unmoved: Bool?; let notify_exam: Bool? }
+        return try await APIClient.json("PATCH", path: "api/v1/me/settings",
+                                        body: Body(notify_unmoved: notifyUnmoved, notify_exam: notifyExam),
+                                        as: SettingsDTO.self)
     }
 
     /// 학교 저장 (#105). 보낸 칸만 바꿔요.

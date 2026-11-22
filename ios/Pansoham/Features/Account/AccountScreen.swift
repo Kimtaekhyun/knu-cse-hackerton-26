@@ -9,8 +9,10 @@ import SwiftUI
 
 struct AccountScreen: View {
     @Environment(Router.self) private var router
-    @State private var classAlert = true
+    /// 시험 기간 알림 · 옮기지 않은 판서 알림 (로그인했으면 서버 값, #109)
+    @State private var examAlert = true
     @State private var pendingAlert = true
+    @State private var settingsError: String?
     @AppStorage("profileName") private var name = "김마린"
     @AppStorage("profileSchool") private var school = "경북대학교"
     @State private var editingProfile = false
@@ -51,6 +53,15 @@ struct AccountScreen: View {
             .task {
                 guard isLive, let me = try? await AuthAPI.me() else { return }
                 liveSchool = me.school
+                if let settings = me.settings {
+                    examAlert = settings.notifyExam
+                    pendingAlert = settings.notifyUnmoved
+                }
+            }
+            .alert("알림 설정을 저장하지 못했어요", isPresented: Binding(get: { settingsError != nil }, set: { if !$0 { settingsError = nil } })) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(settingsError ?? "")
             }
             .alert("학교를 저장하지 못했어요", isPresented: Binding(get: { schoolError != nil }, set: { if !$0 { schoolError = nil } })) {
                 Button("확인", role: .cancel) {}
@@ -78,6 +89,24 @@ struct AccountScreen: View {
             } message: {
                 Text("찍은 판서와 카드가 모두 지워지고 되돌릴 수 없어요.")
             }
+    }
+
+    /// 알림 토글 저장: 로그인했으면 `PATCH /me/settings`, 실패하면 원래 값으로 되돌려요.
+    private func saveSettings(exam: Bool? = nil, unmoved: Bool? = nil) {
+        guard isLive else { return }
+        Task {
+            do {
+                let saved = try await AuthAPI.updateSettings(notifyUnmoved: unmoved, notifyExam: exam)
+                examAlert = saved.notifyExam
+                pendingAlert = saved.notifyUnmoved
+            } catch {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    if let exam { examAlert = !exam }
+                    if let unmoved { pendingAlert = !unmoved }
+                }
+                settingsError = error.localizedDescription
+            }
+        }
     }
 
     private func closePicker() {
@@ -158,9 +187,9 @@ struct AccountScreen: View {
                 }
             }
             group("알림", width) {
-                toggleRow("수업 시작 알림", isOn: $classAlert)
+                toggleRow("시험 기간 알림", isOn: $examAlert) { saveSettings(exam: $0) }
                 divider
-                toggleRow("옮기지 않은 판서 알림", isOn: $pendingAlert)
+                toggleRow("옮기지 않은 판서 알림", isOn: $pendingAlert) { saveSettings(unmoved: $0) }
             }
             group("계정", width) {
                 row("로그아웃") { confirmingLogout = true }
@@ -235,12 +264,13 @@ struct AccountScreen: View {
         .buttonStyle(.plain)
     }
 
-    private func toggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
+    private func toggleRow(_ title: String, isOn: Binding<Bool>, onChange: @escaping (Bool) -> Void = { _ in }) -> some View {
         HStack {
             Text(title).ds(16, .medium)
             Spacer()
             Button {
                 withAnimation(.easeInOut(duration: 0.15)) { isOn.wrappedValue.toggle() }
+                onChange(isOn.wrappedValue)
             } label: {
                 if isOn.wrappedValue {
                     Image("toggle-on")
