@@ -11,6 +11,9 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!-- 판서 촬영(09). 없으면 카메라를 켜는 순간 앱이 종료된다 -->
+	<key>NSCameraUsageDescription</key>
+	<string>수업 판서를 찍어 정리하기 위해 카메라를 사용해요. 칠판과 화면만 찍어 주세요.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>같은 Wi-Fi의 개발 서버에 연결하기 위해 사용해요.</string>
 	<!-- 카카오 네이티브 앱 키. xcconfig의 KAKAO_NATIVE_APP_KEY 값이 들어간다 (KakaoLogin.configure()가 읽음) -->
