@@ -1,6 +1,7 @@
 from sqlalchemy import select
 
 from app.models import Capture, Semester, SemesterTerm, Subject
+from app.services.timetable_ocr import RawBlock, RawTimetable, normalize
 from tests.db.factories import make_capture, make_semester, make_slot, make_subject, make_user
 
 URL = "/api/v1/semesters"
@@ -196,6 +197,20 @@ def test_timetable_result_can_be_saved_as_is(client, auth):
     response = client.put(f"{URL}/{semester['id']}/timetable", headers=auth, json=parsed)
     assert response.status_code == 200
     assert response.json()["subject_count"] == 1
+
+
+def test_late_timetable_result_can_be_saved_as_is(client, auth):
+    """밤늦게 끝나는 수업도 인식 결과(normalize)를 그대로 저장할 수 있다 (24:00 → 23:59, #72)"""
+    raw = RawTimetable(
+        blocks=[RawBlock(name="야간 실습", weekday=2, start="22:30", end="23:50")], untimed=[]
+    )
+    parsed = {"subjects": [s.model_dump() for s in normalize(raw)]}
+    semester = create(client, auth).json()
+
+    response = client.put(f"{URL}/{semester['id']}/timetable", headers=auth, json=parsed)
+    assert response.status_code == 200
+    (subject,) = response.json()["subjects"]
+    assert subject["slots"] == [{"weekday": 2, "start": "22:30", "end": "23:59"}]
 
 
 def test_save_empty_timetable_removes_all_subjects(client, auth, db, user):
