@@ -61,11 +61,8 @@ struct StickerCard: View {
                 } else if handwriting {
                     InkCrop(sticker: sticker, width: width - 40, height: 64)
                 } else {
-                    Text(sticker.text)
-                        .font(.system(size: 20, weight: .medium))
-                        .tracking(-0.2)
-                        .lineSpacing(20 * 1.45 - 24)
-                        .foregroundStyle(.black)
+                    // $...$ 구간은 수식으로 그려요 (#113)
+                    MathText(text: sticker.text, size: 20, weight: .medium, lineGap: 20 * 1.45 - 24)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }

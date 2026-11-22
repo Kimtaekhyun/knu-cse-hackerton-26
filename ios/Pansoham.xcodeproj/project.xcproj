@@ -17,6 +17,12 @@
       "version": {
         "up-to-next-major-version": "2.30.0",
       },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/mgriebling/SwiftMath",
+      "version": {
+        "up-to-next-major-version": "1.7.3",
+      },
     },
   ],
   "files": [
@@ -43,6 +49,10 @@
       ],
       "package-product-members": [
         {
+          "package": "SwiftMath",
+          "product-name": "SwiftMath",
+          "build-phase": { "build-phase": "frameworks" },
+        }, {
           "package": "kakao-ios-sdk",
           "product-name": "KakaoSDKAuth",
           "build-phase": { "build-phase": "frameworks" },
