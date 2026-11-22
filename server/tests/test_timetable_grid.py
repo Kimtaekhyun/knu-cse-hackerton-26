@@ -105,3 +105,46 @@ def test_grid_to_raw_uses_image_to_fix_end():
     )
     block = grid_to_raw(grid, image=img).blocks[0]
     assert (block.start, block.end) == ("10:00", "12:00")
+
+
+# ── 연강 칸끼리 경계 넘지 않기 (#110) ──
+
+SIMILAR_RED = (210, 100, 90)  # RED와 채널 차이 10 → 같은 색으로 보이는 비슷한 색
+
+
+def test_refine_alone_merges_similar_adjacent_blocks():
+    """고치기 전 현상: 비슷한 색 연강은 색만으로는 경계를 못 찾는다"""
+    img = paint(canvas(), 200, 400, 10, 90, RED)
+    paint(img, 402, 600, 10, 90, SIMILAR_RED)
+    assert refine_rows(img, [200, 100, 300, 900]) == pytest.approx((200, 600), abs=2)
+
+
+def test_grid_to_raw_splits_similar_adjacent_blocks():
+    img = paint(canvas(), 200, 400, 10, 90, RED)
+    paint(img, 400, 600, 10, 90, SIMILAR_RED)
+    grid = TimetableGrid(
+        blocks=[
+            # 모델이 글씨 부분만 감싸 두 칸 모두 아랫변이 짧은 경우
+            BlockBox(name="운영체제", weekday=2, box_2d=[200, 100, 300, 900]),
+            BlockBox(name="자료구조", weekday=2, box_2d=[400, 100, 480, 900]),
+        ],
+        hours=[mark(9, 100), mark(10, 200), mark(11, 300), mark(12, 400)],
+        untimed=[],
+    )
+    first, second = grid_to_raw(grid, image=img).blocks
+    assert (first.start, first.end) == ("10:00", "12:00")
+    assert (second.start, second.end) == ("12:00", "14:00")
+
+
+def test_neighbor_on_other_weekday_does_not_clamp():
+    img = paint(canvas(), 200, 600, 10, 90, RED)
+    grid = TimetableGrid(
+        blocks=[
+            BlockBox(name="운영체제", weekday=0, box_2d=[200, 100, 300, 900]),
+            BlockBox(name="자료구조", weekday=1, box_2d=[400, 100, 500, 900]),
+        ],
+        hours=[mark(9, 100), mark(10, 200), mark(11, 300), mark(12, 400)],
+        untimed=[],
+    )
+    first = grid_to_raw(grid, image=img).blocks[0]
+    assert (first.start, first.end) == ("10:00", "14:00")
