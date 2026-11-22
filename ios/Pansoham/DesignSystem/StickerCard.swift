@@ -17,18 +17,29 @@ struct StickerCard: View {
     var onTap: () -> Void = {}
     var onCopy: () -> Void = {}
     var onSelect: () -> Void = {}
+    /// 있으면 복사 아이콘 왼쪽에 휴지통 (12 결과, #99)
+    var onDelete: (() -> Void)? = nil
 
     @State private var handwriting: Bool
+    /// 서버 손글씨 스티커 (필기만 남긴 투명 PNG)
+    @State private var ink: UIImage?
 
     init(sticker: Sticker, width: CGFloat = 343, selected: Bool? = nil,
-         onTap: @escaping () -> Void = {}, onCopy: @escaping () -> Void = {}, onSelect: @escaping () -> Void = {}) {
+         onTap: @escaping () -> Void = {}, onCopy: @escaping () -> Void = {}, onSelect: @escaping () -> Void = {},
+         onDelete: (() -> Void)? = nil) {
         self.sticker = sticker
         self.width = width
         self.selected = selected
         self.onSelect = onSelect
         self.onTap = onTap
         self.onCopy = onCopy
+        self.onDelete = onDelete
         _handwriting = State(initialValue: sticker.handwriting)
+    }
+
+    /// 서버 스티커는 원래 잉크 색(흰 분필 등)이라, 모양만 쓰고 검정으로 칠해요.
+    private func inkView(_ image: UIImage) -> some View {
+        Image(uiImage: image).renderingMode(.template).resizable().scaledToFit().foregroundStyle(.black)
     }
 
     var body: some View {
@@ -43,7 +54,9 @@ struct StickerCard: View {
             }
 
             Group {
-                if handwriting, let ink = sticker.inkImage {
+                if handwriting, let ink {
+                    inkView(ink).frame(width: width - 40, height: 64, alignment: .leading)
+                } else if handwriting, let ink = sticker.inkImage {
                     Image(ink).resizable().scaledToFit().frame(width: width - 40, height: 64, alignment: .leading)
                 } else if handwriting {
                     InkCrop(sticker: sticker, width: width - 40, height: 64)
@@ -58,6 +71,10 @@ struct StickerCard: View {
             }
             .contentShape(Rectangle())
             .onTapGesture(perform: onTap)
+            .task(id: handwriting) {
+                guard handwriting, ink == nil, let id = sticker.cardID else { return }
+                ink = await CardAPI.image(id)
+            }
 
             HStack {
                 HStack(spacing: 2) {
@@ -68,6 +85,14 @@ struct StickerCard: View {
                 .background(Color.black.opacity(0.05))
                 .clipShape(Capsule())
                 Spacer()
+                if let onDelete {
+                    Button(action: onDelete) {
+                        Image(systemName: "trash").font(.system(size: 16, weight: .medium)).foregroundStyle(Color.dsSub)
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 6)
+                }
                 Button(action: onCopy) { Image("copy-20") }
                     .buttonStyle(.plain)
             }
@@ -96,6 +121,8 @@ struct StickerCard: View {
 
     /// 끌어다 놓을 때 건네는 내용. 텍스트 보기면 글자, 손글씨 보기면 사진 조각.
     private func dragItem() -> NSItemProvider {
+        // 굿노트로 옮긴 카드는 "옮김" 표시 (#99)
+        CardAPI.markMovedQuietly([sticker])
         guard handwriting else { return NSItemProvider(object: sticker.text as NSString) }
         let renderer = ImageRenderer(content: inkPiece)
         renderer.scale = 3
@@ -110,7 +137,9 @@ struct StickerCard: View {
     /// 원본 사진에서 이 카드 자리 전체를 잘라 낸 조각
     @ViewBuilder
     private var inkPiece: some View {
-        if let ink = sticker.inkImage {
+        if let ink {
+            inkView(ink).frame(width: sticker.w * 2, height: sticker.h * 2)
+        } else if let ink = sticker.inkImage {
             Image(ink)
         } else {
             InkCrop(sticker: sticker, width: sticker.w * 2, height: sticker.h * 2)

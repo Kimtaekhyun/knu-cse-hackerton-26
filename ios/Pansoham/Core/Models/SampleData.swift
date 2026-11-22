@@ -25,7 +25,7 @@ enum SampleData {
 
 /// 판서에서 찾아낸 카드 한 장
 struct Sticker: Identifiable, Hashable {
-    let id: Int                 // 카드 번호 (1부터)
+    var id: Int                 // 카드 번호 (1부터)
     let title: String
     let kind: String            // "수식" 등
     let text: String            // 텍스트로 바꾼 내용
@@ -36,6 +36,12 @@ struct Sticker: Identifiable, Hashable {
     /// 서버에서 받은 판서 사진 (없으면 샘플 사진 `board-photo`). 자리는 너비 372 · 높이 372 × photoAspect 기준
     var photo: UIImage? = nil
     var photoAspect: CGFloat = 279.0 / 372.0
+    /// 서버 카드 id (샘플이면 nil, #99)
+    var cardID: UUID? = nil
+    /// text · math · code
+    var cardType = "text"
+    /// 사용자가 고쳤는지 (원래대로 되돌리기)
+    var isEdited = false
 }
 
 extension SampleData {

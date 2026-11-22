@@ -82,6 +82,8 @@ struct ResultScreen: View {
     @State private var confirmDelete = false
     @State private var deleting = false
     @State private var deleteError: String?
+    /// 지울 카드 (확인 창, #99)
+    @State private var deletingCard: Sticker?
 
     private var flow: CaptureFlow { .shared }
     /// 서버가 처리한 사진들. 비어 있으면(로그인 전 · 다른 화면에서 열 때) 샘플을 보여 줘요.
@@ -160,6 +162,12 @@ struct ResultScreen: View {
             Text("\(isBatch ? "이 사진의 " : "")카드 \(stickers.count)개도 함께 지워지고 되돌릴 수 없어요.")
         }
         .deleteFailedAlert($deleteError)
+        .alert("카드를 삭제할까요?", isPresented: Binding(get: { deletingCard != nil }, set: { if !$0 { deletingCard = nil } })) {
+            Button("취소", role: .cancel) { deletingCard = nil }
+            Button("삭제", role: .destructive) { if let card = deletingCard { deleteCard(card) } }
+        } message: {
+            Text("삭제한 카드는 되돌릴 수 없어요.")
+        }
         // 다른 곳(옮기지 않은 판서 목록 등)에서 결과를 열 때는 한 장 · 샘플로 보여 줘요.
         .onDisappear {
             if !router.stack.contains(.result) {
@@ -375,11 +383,34 @@ struct ResultScreen: View {
     // MARK: 공통 조각
 
     private func card(_ index: Int, width: CGFloat = 343) -> some View {
-        // 카드 상세(14)는 아직 샘플이라, 서버 결과일 때는 열지 않아요.
-        StickerCard(sticker: stickers[index], width: width,
-                    onTap: { if !isLive { router.push(.cardDetail) } },
-                    onCopy: { copy([stickers[index]]) })
+        let sticker = stickers[index]
+        return StickerCard(sticker: sticker, width: width,
+                    onTap: { openCard(sticker) },
+                    onCopy: { copy([sticker]) },
+                    onDelete: { deletingCard = sticker })
+            .id(sticker.cardID?.uuidString ?? "\(sticker.id)")
             .entrance(shown > 0, delay: 0.3 + 0.12 * Double(min(index, 8)), duration: 0.45, y: 20)
+    }
+
+    /// 카드 상세(17). 서버 카드면 그 카드를 고쳐요.
+    private func openCard(_ sticker: Sticker) {
+        CaptureFlow.shared.openedCard = sticker.cardID == nil ? nil : sticker
+        router.push(.cardDetail)
+    }
+
+    /// 카드 한 장 지우기 (#99). 샘플은 지울 수 없어 그냥 닫아요.
+    private func deleteCard(_ sticker: Sticker) {
+        deletingCard = nil
+        guard let id = sticker.cardID else { return }
+        Task {
+            do {
+                try await CardAPI.delete(id)
+                withAnimation(.easeInOut(duration: 0.2)) { flow.updateCard(removed: id) }
+                await SubjectCaptures.unmoved.load(.unmoved)
+            } catch {
+                deleteError = error.localizedDescription
+            }
+        }
     }
 
     /// 복사 완료 알림
@@ -401,6 +432,7 @@ struct ResultScreen: View {
     /// `thenGuide` 면 알림 뒤에 스플릿 뷰 안내로 넘어가고, 아니면 알림만 사라져요.
     private func copy(_ cards: [Sticker], thenGuide: Bool = false) {
         Clipboard.copy(cards.map(\.text).joined(separator: "\n\n"))
+        CardAPI.markMovedQuietly(cards)
         withAnimation(.easeOut(duration: 0.5).delay(0.1)) { copiedCount = cards.count }
         Task {
             try? await Task.sleep(for: .seconds(2.2))

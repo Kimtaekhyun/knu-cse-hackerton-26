@@ -85,10 +85,13 @@ struct CardDTO: Decodable, Identifiable, Hashable {
     let cardType: String
     let content: String
     let bbox: Box
+    /// 사용자가 고쳤는지 · 굿노트로 옮겼는지 (#88)
+    let isEdited: Bool
+    let isMoved: Bool
 
     enum CodingKeys: String, CodingKey {
         case id, title, content, bbox
-        case orderNo = "order_no", cardType = "card_type"
+        case orderNo = "order_no", cardType = "card_type", isEdited = "is_edited", isMoved = "is_moved"
     }
 
     var kindTitle: String {
@@ -103,7 +106,8 @@ struct CardDTO: Decodable, Identifiable, Hashable {
     func sticker(aspect: CGFloat) -> Sticker {
         let height = 372 * aspect
         return Sticker(id: orderNo, title: title, kind: kindTitle, text: content,
-                       x: bbox.x * 372, y: bbox.y * height, w: bbox.w * 372, h: bbox.h * height)
+                       x: bbox.x * 372, y: bbox.y * height, w: bbox.w * 372, h: bbox.h * height,
+                       cardID: id, cardType: cardType, isEdited: isEdited)
     }
 }
 

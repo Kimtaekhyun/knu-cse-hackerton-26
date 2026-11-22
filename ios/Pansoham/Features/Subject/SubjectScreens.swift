@@ -579,6 +579,7 @@ struct SubjectCardsScreen: View {
                     .buttonStyle(.plain)
                     PrimaryButton(title: "\(selection.count)개 복사", enabled: !selection.isEmpty) {
                         Clipboard.copy(selectedText)
+                        CardAPI.markMovedQuietly(all.filter { selection.contains($0.id) })
                         router.push(.splitView)
                     }
                 }
@@ -594,10 +595,9 @@ struct SubjectCardsScreen: View {
 
     /// 카드를 누르면: 서버 카드면 그 판서의 결과 화면, 샘플이면 카드 상세
     private func open(_ sticker: Sticker) {
-        guard isLive else { router.push(.cardDetail); return }
-        guard let job = liveCards.first(where: { $0.sticker.id == sticker.id })?.item.job else { return }
-        CaptureFlow.shared.open([job], folder: router.subjectName(""))
-        router.push(.result)
+        // 서버 카드면 그 카드를 카드 상세(17)에서 고쳐요 (#99)
+        CaptureFlow.shared.openedCard = isLive ? sticker : nil
+        router.push(.cardDetail)
     }
 
     private func reload() async {
@@ -831,6 +831,7 @@ extension SubjectCardsScreen {
     /// 고른 카드의 글자를 클립보드에 넣고 알림을 잠깐 띄워요.
     private func copySelection() {
         Clipboard.copy(selectedText)
+        CardAPI.markMovedQuietly(all.filter { selection.contains($0.id) })
         withAnimation(.easeOut(duration: 0.5).delay(0.1)) { copiedCount = selection.count }
         Task {
             try? await Task.sleep(for: .seconds(2.2))
