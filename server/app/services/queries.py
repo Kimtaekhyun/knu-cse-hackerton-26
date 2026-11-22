@@ -9,7 +9,7 @@ from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import Date, cast, exists, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 
 from app.models import (
     AcademicCalendar,
@@ -97,13 +97,46 @@ def current_slot(db: Session, user_id: uuid.UUID, now: datetime) -> SubjectSlot 
     ).first()
 
 
+def today_slots(db: Session, user_id: uuid.UUID, weekday: int) -> list[SubjectSlot]:
+    """그 요일의 수업 칸 전부 (현재 학기 과목만), 시작 시각 순. 끝난 수업도 들어간다
+
+    과목 이름을 바로 쓸 수 있게 subject를 함께 불러온다.
+    """
+    return list(
+        db.scalars(
+            select(SubjectSlot)
+            .join(Subject, SubjectSlot.subject_id == Subject.id)
+            .join(Semester, Subject.semester_id == Semester.id)
+            .where(Semester.user_id == user_id, Semester.is_current, SubjectSlot.weekday == weekday)
+            .options(contains_eager(SubjectSlot.subject))
+            .order_by(SubjectSlot.start_time, SubjectSlot.end_time, Subject.name)
+        )
+    )
+
+
+def done_capture_count(db: Session, user_id: uuid.UUID) -> int:
+    """정리가 끝난 판서 수 (메인 07 처음 · 08 판서가 쌓인 뒤 구분)"""
+    return db.scalar(
+        select(func.count())
+        .select_from(Capture)
+        .where(Capture.user_id == user_id, Capture.status == CaptureStatus.done)
+    )
+
+
 def weekly_capture_counts(db: Session, user_id: uuid.UUID, week_start: date) -> dict[date, int]:
-    """week_start부터 7일 동안 날짜별로 찍은 판서 수. 판서가 없는 날도 0으로 넣는다"""
+    """week_start부터 7일 동안 날짜별로 정리가 끝난 판서 수. 판서가 없는 날도 0으로 넣는다
+
+    과목 폴더 장수(subject_capture_count)와 같이 처리 중 · 실패한 판서는 세지 않는다.
+    """
     week_end = week_start + timedelta(days=6)
     seoul_day = cast(func.timezone("Asia/Seoul", Capture.taken_at), Date)
     rows = db.execute(
         select(seoul_day, func.count())
-        .where(Capture.user_id == user_id, seoul_day.between(week_start, week_end))
+        .where(
+            Capture.user_id == user_id,
+            Capture.status == CaptureStatus.done,
+            seoul_day.between(week_start, week_end),
+        )
         .group_by(seoul_day)
     ).all()
     counts = {week_start + timedelta(days=i): 0 for i in range(7)}
