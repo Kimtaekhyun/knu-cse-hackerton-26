@@ -336,6 +336,10 @@ struct TimetableConfirmScreen: View {
     /// 05 에서 고른 캡처를 서버로 보내 과목 목록을 채워요.
     /// 캡처 없이 열면(내 계정 › 시간표 수정) 서버의 현재 학기 과목을, 그것도 없으면 샘플 과목을 보여 줘요.
     private func analyze() async {
+        // 학기 선택 처음 값: 오늘 날짜 기준 (서버 규칙). 시간표 수정이면 아래에서 저장된 학기로 바꿔요.
+        if router.semester == nil, router.timetableImage != nil || isManual {
+            router.semester = await SemesterAPI.suggested()
+        }
         // 직접 등록: 빈 목록에서 과목 추가로 채워요
         if isManual {
             load = .loaded
@@ -346,7 +350,9 @@ struct TimetableConfirmScreen: View {
             await store.reload()
             subjects = store.current.map { $0.subjects?.map(\.timetableSubject) ?? [] } ?? SampleData.timetable
             // 시간표 수정: 저장된 현재 학기를 학기 버튼에 미리 넣어 둬요
-            if router.semester == nil { router.semester = store.current?.semester }
+            if router.semester == nil {
+                if let saved = store.current?.semester { router.semester = saved } else { router.semester = await SemesterAPI.suggested() }
+            }
             load = .loaded
             return
         }
@@ -398,8 +404,11 @@ struct TimetableConfirmScreen: View {
         Task {
             defer { saving = false }
             do {
-                let saved = try await SemesterAPI.saveTimetable(subjects, semester: semester)
-                SemesterStore.shared.use(saved)
+                // 지금 현재 학기보다 앞선 학기(새 학기 추가로 지난 학기를 넣을 때)면 현재 학기는 그대로 둬요.
+                let current = SemesterStore.shared.current?.semester
+                let makeCurrent = current.map { semester.order >= $0.order } ?? true
+                let saved = try await SemesterAPI.saveTimetable(subjects, semester: semester, makeCurrent: makeCurrent)
+                if makeCurrent { SemesterStore.shared.use(saved) } else { await SemesterStore.shared.reload() }
                 router.timetableImage = nil
                 router.reset(to: .home)
             } catch {

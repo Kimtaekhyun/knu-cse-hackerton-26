@@ -58,7 +58,7 @@ final class Router {
     var pastSemesterID: UUID?
     /// 시간표를 사진 없이 직접 등록하는 중인지 (05 "시간표 직접 등록하기")
     var timetableManual = false
-    /// 06 에서 고른 학기. nil 이면 올해 1학기(`Semester.current()`)를 써요.
+    /// 06 에서 고른 학기. nil 이면 오늘 날짜 기준 학기(`Semester.current()`)를 써요.
     var semester: Semester?
     /// 메인 `앨범에서 선택` 으로 고른 판서 사진들. 처리 중(10)이 한 장씩 차례로 처리해요.
     var albumPhotos: [UIImage] = []
