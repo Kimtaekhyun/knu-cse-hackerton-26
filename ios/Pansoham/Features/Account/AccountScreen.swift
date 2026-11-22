@@ -17,6 +17,7 @@ struct AccountScreen: View {
     @State private var draftName = ""
     @State private var draftSchool = ""
     @State private var confirmingDelete = false
+    @State private var confirmingLogout = false
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
@@ -29,6 +30,12 @@ struct AccountScreen: View {
                     if !newName.isEmpty { name = newName }
                     school = draftSchool.trimmingCharacters(in: .whitespaces)
                 }
+            }
+            .alert("로그아웃할까요?", isPresented: $confirmingLogout) {
+                Button("취소", role: .cancel) {}
+                Button("로그아웃", role: .destructive) { logout() }
+            } message: {
+                Text("다시 카카오로 로그인하면 시간표와 판서를 그대로 볼 수 있어요.")
             }
             .alert("계정을 삭제할까요?", isPresented: $confirmingDelete) {
                 Button("취소", role: .cancel) {}
@@ -76,9 +83,9 @@ struct AccountScreen: View {
                 toggleRow("옮기지 않은 판서 알림", isOn: $pendingAlert)
             }
             group("계정", width) {
-                row("로그아웃") { logout() }
+                row("로그아웃") { confirmingLogout = true }
                 divider
-                row("계정 삭제", color: .dsSub) { confirmingDelete = true }
+                row("계정 삭제", color: .red) { confirmingDelete = true }
             }
         }
     }
