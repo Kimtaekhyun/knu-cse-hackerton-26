@@ -42,7 +42,7 @@ enum APIError: LocalizedError {
 
 enum APIClient {
     /// 올리기 전에 줄이는 긴 변 길이 (서버 10MB 제한 · 업로드 시간 때문)
-    static let maxImageSide: CGFloat = 2048
+    nonisolated static let maxImageSide: CGFloat = 2048
     /// 서버가 Gemini 재시도 · 분당 제한으로 1분 넘게 걸릴 수 있어서 넉넉히 기다려요.
     static let timeout: TimeInterval = 180
 
@@ -50,9 +50,10 @@ enum APIClient {
     /// `fields` 는 함께 보낼 글자 칸 (판서의 `id` · `taken_at` 등), `maxSide` 는 줄일 긴 변 길이예요.
     static func uploadImage<T: Decodable>(path: String, image: UIImage, fields: [String: String] = [:],
                                           maxSide: CGFloat = maxImageSide, as type: T.Type) async throws -> T {
-        guard let jpeg = resized(image, maxSide: maxSide).jpegData(compressionQuality: 0.9) else {
-            throw APIError.invalidResponse
-        }
+        // 줄이기 · JPEG 압축은 4K 사진이면 1초 가까이 걸려서 메인 스레드 밖에서 해요 (화면이 멈추지 않게, #101)
+        guard let jpeg = await jpegData(image, maxSide: maxSide) else { throw APIError.invalidResponse }
+        // 압축하는 동안 취소했으면(처리 중 화면에서 나가면) 보내지 않아요
+        try Task.checkCancellation()
 
         let boundary = "Boundary-\(UUID().uuidString)"
         var body = Data()
@@ -124,6 +125,9 @@ enum APIClient {
         let response: URLResponse
         do {
             (data, response) = try await URLSession.shared.data(for: request)
+        } catch let error as URLError where error.code == .cancelled {
+            // 화면을 나가서 요청이 취소된 건 연결 실패가 아니에요. 오류 알림을 띄우지 않게 취소로 넘겨요 (#101)
+            throw CancellationError()
         } catch is URLError {
             throw APIError.unreachable
         }
@@ -143,8 +147,14 @@ enum APIClient {
         return data
     }
 
+    /// 줄이고 JPEG 로 바꿔요. 백그라운드에서 돌아요.
+    @concurrent
+    private nonisolated static func jpegData(_ image: UIImage, maxSide: CGFloat) async -> Data? {
+        resized(image, maxSide: maxSide).jpegData(compressionQuality: 0.9)
+    }
+
     /// 긴 변이 `maxSide` 를 넘으면 비율을 지켜 줄여요.
-    private static func resized(_ image: UIImage, maxSide: CGFloat) -> UIImage {
+    private nonisolated static func resized(_ image: UIImage, maxSide: CGFloat) -> UIImage {
         let longest = max(image.size.width, image.size.height)
         guard longest > maxSide else { return image }
         let scale = maxSide / longest

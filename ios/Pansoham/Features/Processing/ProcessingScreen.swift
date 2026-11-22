@@ -23,6 +23,8 @@ struct ProcessingScreen: View {
     @State private var rectified: UIImage?
     /// 서버에 연결하지 못했을 때 문구
     @State private var errorMessage: String?
+    /// 취소를 눌렀는지. 늦게 도착한 응답이 화면을 바꾸지 않게 해요 (#101)
+    @State private var stopped = false
 
     private var flow: CaptureFlow { .shared }
     /// 찍었거나 앨범에서 고른 사진들
@@ -158,6 +160,10 @@ struct ProcessingScreen: View {
     /// 한 장일 때는 그냥 돌아가고, 여러 장일 때는 끝난 사진까지만 결과로 보여 줘요.
     /// 서버는 올라간 판서를 계속 처리해요 (나중에 과목 폴더에서 볼 수 있어요).
     private func cancel() {
+        guard !stopped else { return }
+        stopped = true
+        errorMessage = nil
+        discardUnfinished()
         let done = flow.isLive ? flow.results.count : current
         if isBatch && done > 0 {
             finish(done: done)
@@ -165,6 +171,29 @@ struct ProcessingScreen: View {
             router.albumPhotos = []
             flow.jobs = []
             router.pop()
+        }
+    }
+
+    /// 취소하면 아직 끝나지 않은 판서는 서버에서도 지워요 (결과로 보여 줄 끝난 판서는 남겨요).
+    /// id 는 앱이 올리기 전에 만든 값이라, 업로드 답을 못 받았어도 같은 id 로 지울 수 있어요.
+    /// 올리던 요청이 지우기보다 늦게 서버에 닿을 수 있어서, 없다고 하면(404) 잠시 뒤 한 번 더 지워요.
+    private func discardUnfinished() {
+        guard flow.isLive else { return }
+        let kept = Set(flow.results.map(\.id))
+        let ids = flow.jobs.map(\.id).filter { !kept.contains($0) }
+        guard !ids.isEmpty else { return }
+        // 화면이 닫혀도 끝까지 지우도록 화면과 묶이지 않은 작업으로 돌려요
+        Task {
+            for id in ids {
+                do {
+                    try await CaptureAPI.delete(id)
+                } catch APIError.notFound {
+                    try? await Task.sleep(for: .seconds(3))
+                    try? await CaptureAPI.delete(id)
+                } catch {
+                    // 지우지 못해도 앱 동작에는 영향 없어요 (판서가 미분류함 등에 남을 뿐)
+                }
+            }
         }
     }
 
@@ -337,6 +366,7 @@ struct ProcessingScreen: View {
     private func runLive() async {
         do {
             for index in current..<flow.jobs.count {
+                try checkAlive(index)
                 if index != current || phase != 0 { show(index: index, phase: 0) }
                 liveCards = []
                 rectified = nil
@@ -348,12 +378,14 @@ struct ProcessingScreen: View {
                     let job = flow.jobs[index]
                     capture = try await CaptureAPI.upload(job.image, id: job.id, takenAt: job.takenAt)
                 }
+                try checkAlive(index)
                 flow.jobs[index].capture = capture
 
                 while !capture.status.isFinished {
                     if capture.status.phase != phase { show(index: index, phase: capture.status.phase) }
                     try await Task.sleep(for: .seconds(1))
                     capture = try await CaptureAPI.detail(capture.id)
+                    try checkAlive(index)
                     flow.jobs[index].capture = capture
                 }
 
@@ -369,6 +401,7 @@ struct ProcessingScreen: View {
 
                 // 끝: 반듯하게 편 사진 위에 카드 자리 · 카드를 잠깐 보여 줘요
                 let image = try? await CaptureAPI.image(capture.id, rectified: true)
+                try checkAlive(index)
                 flow.jobs[index].rectified = image
                 rectified = image
                 show(index: index, phase: 2)
@@ -376,6 +409,7 @@ struct ProcessingScreen: View {
                 flow.results.append(flow.jobs[index])
                 try await Task.sleep(for: .seconds(capture.cards.isEmpty ? 0.6 : 1.8))
             }
+            guard !stopped else { return }
             if flow.results.isEmpty, let first = flow.jobs.first {
                 // 여러 장이 모두 실패했으면 첫 사진으로 오류 화면
                 flow.failed = first
@@ -388,8 +422,15 @@ struct ProcessingScreen: View {
         } catch APIError.unauthorized {
             // 로그인 화면으로 가요 (`ContentView`)
         } catch {
+            // 취소한 뒤 늦게 끝난 요청이면 알림을 띄우지 않아요
+            guard !stopped, !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// 취소했거나 화면을 나갔거나, 목록이 비워졌으면 그만해요 (비운 목록에 쓰다 튕기지 않게)
+    private func checkAlive(_ index: Int) throws {
+        if stopped || Task.isCancelled || !flow.jobs.indices.contains(index) { throw CancellationError() }
     }
 
     private func show(index: Int, phase newPhase: Int) {
