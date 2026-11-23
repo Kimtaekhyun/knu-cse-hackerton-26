@@ -24,6 +24,8 @@ struct StickerCard: View {
     @State private var handwriting: Bool
     /// 서버 손글씨 스티커 (필기만 남긴 투명 PNG)
     @State private var ink: UIImage?
+    /// 붙여넣기 색 (#143). 카드가 직접 지켜봐야 색을 바꾸자마자 끌어다 놓기에도 반영돼요 (#160)
+    @AppStorage(PasteColor.storageKey) private var pasteColorRaw = PasteColor.black.rawValue
 
     init(sticker: Sticker, width: CGFloat = 343, selected: Bool? = nil,
          onTap: @escaping () -> Void = {}, onCopy: @escaping () -> Void = {}, onSelect: @escaping () -> Void = {},
@@ -107,7 +109,8 @@ struct StickerCard: View {
                 .stroke(selected == true ? Color.black : Color.black.opacity(0.1), lineWidth: selected == true ? 2 : 1)
         )
         // 길게 눌러 다른 앱(굿노트 등)으로 끌어다 놓을 수 있어요.
-        .onDrag { dragItem() }
+        // 끌어다 놓기는 카드가 마지막으로 그려질 때의 설정을 써서, 색은 여기(그릴 때)서 읽어 넘겨요 (#160)
+        .onDrag { [pasteColor] in dragItem(pasteColor) }
         .overlay(alignment: .topTrailing) {
             if let selected {
                 Button(action: onSelect) { Image(selected ? "check-on-28" : "check-off-28") }
@@ -119,10 +122,11 @@ struct StickerCard: View {
     }
 
     /// 끌어다 놓을 때 건네는 내용. 텍스트 보기면 글자(수식이 있으면 그린 그림), 손글씨 보기면 사진 조각.
-    private func dragItem() -> NSItemProvider {
+    private var pasteColor: PasteColor { PasteColor(rawValue: pasteColorRaw) ?? .black }
+
+    private func dragItem(_ color: PasteColor) -> NSItemProvider {
         // 굿노트로 옮긴 카드는 "옮김" 표시 (#99)
         CardAPI.markMovedQuietly([sticker])
-        let color = PasteColor.current
         guard handwriting else {
             // 굿노트는 LaTeX를 그리지 못해서, 수식이 있는 카드는 화면에 보이는 모양을 그림으로 넘겨요 (#113)
             if sticker.hasMath, let image = MathText.image([sticker], width: width - 40, color: color.color) {
