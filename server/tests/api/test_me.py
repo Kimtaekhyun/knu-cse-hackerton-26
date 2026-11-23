@@ -4,9 +4,9 @@ import unicodedata
 
 import pytest
 
-from app.models import UserSettings
+from app.models import SemesterTerm, UserSettings
 from tests.api.conftest import bearer
-from tests.db.factories import make_user
+from tests.db.factories import make_semester, make_user
 
 ME = "/api/v1/me"
 
@@ -193,3 +193,24 @@ def test_settings_of_other_user_are_untouched(client, db, auth):
 
 def test_patch_settings_without_token_is_401(client):
     assert client.patch(SETTINGS, json={"notify_exam": False}).status_code == 401
+
+
+# ---------- 학교를 바꾸면 학사일정 미리 찾기 (#173) ----------
+
+
+def test_new_school_calendar_is_searched_ahead(client, db, auth, user, calendar_lookups):
+    make_semester(db, user)
+    assert patch_me(client, auth, {"school": "부산대학교"}).status_code == 200
+    assert calendar_lookups == [("부산대학교", 2026, SemesterTerm.second)]
+
+
+def test_school_with_calendar_is_not_searched(client, db, auth, user, calendar_lookups):
+    make_semester(db, user)
+    patch_me(client, auth, {"school": "경북대학교"})  # 시드에 있는 학교 · 학기
+    assert calendar_lookups == []
+
+
+def test_name_change_does_not_search(client, db, auth, user, calendar_lookups):
+    make_semester(db, user, year=2027, term=SemesterTerm.first)
+    patch_me(client, auth, {"name": "민석"})
+    assert calendar_lookups == []

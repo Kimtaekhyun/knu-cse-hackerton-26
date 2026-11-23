@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models import User, UserSettings
 from app.schemas.me import ProfileUpdate, SettingsUpdate
+from app.services import academic_calendar
 
 
 def update_profile(db: Session, user: User, changes: ProfileUpdate) -> User:
@@ -17,6 +18,9 @@ def update_profile(db: Session, user: User, changes: ProfileUpdate) -> User:
     if "school" in sent:
         user.school = changes.school or None
     db.commit()
+    if "school" in sent and user.school:
+        # 새 학교 학사일정이 없으면 미리 뒤에서 찾아 둔다 (#173). 저장은 기다리지 않는다
+        academic_calendar.calendar_for(db, user)
     return user
 
 

@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.main import app
+from app.services import academic_calendar
 from app.services.pipeline import worker
 from tests.db.factories import make_user
 
@@ -35,6 +36,17 @@ def enqueued(monkeypatch):
         "enqueue",
         lambda capture_id, *, skip_rectify=False: calls.append((str(capture_id), skip_rectify)),
     )
+    return calls
+
+
+@pytest.fixture(autouse=True)
+def calendar_lookups(monkeypatch):
+    """API 테스트에서는 학사일정을 실제로 찾지 않고(웹 검색 · 요금) 찾으라고 한 기록만 남긴다 (#173)
+
+    찾기 자체는 tests/test_academic_calendar.py에서 따로 확인한다.
+    """
+    calls: list[tuple] = []
+    monkeypatch.setattr(academic_calendar, "request_lookup", lambda *key: calls.append(key))
     return calls
 
 

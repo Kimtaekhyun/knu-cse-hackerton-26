@@ -2,18 +2,22 @@
 
 - 시험 기간은 시작일부터 7일 (종료일 = 시작일 + 6일)
 - 시작일이 비어 있으면 개강일 기준 중간 8주차 · 기말 15주차 시작일
+- 학사일정이 아예 없으면 개강일을 추정한다 (1학기 3월 2일 · 2학기 9월 1일, 주말이면 다음 월요일).
+  계절학기(여름 · 겨울)는 시험 기간을 잡지 않는다 (#173)
 """
 
 from datetime import date, timedelta
 from typing import Literal, NamedTuple
 
-from app.models import AcademicCalendar
+from app.models import AcademicCalendar, SemesterTerm
 
 ExamKind = Literal["midterm", "final"]
 
 EXAM_DAYS = 7
 MIDTERM_WEEK = 8
 FINAL_WEEK = 15
+# 학사일정이 없을 때 추정하는 개강일 (월, 일)
+ESTIMATED_START = {SemesterTerm.first: (3, 2), SemesterTerm.second: (9, 1)}
 
 
 class Exam(NamedTuple):
@@ -28,6 +32,26 @@ class Exam(NamedTuple):
 def week_start(calendar: AcademicCalendar, week: int) -> date:
     """개강일이 1주차 첫날일 때 week주차 첫날"""
     return calendar.starts_on + timedelta(weeks=week - 1)
+
+
+def estimated_start(year: int, term: SemesterTerm) -> date | None:
+    """학사일정이 없을 때 쓰는 개강일. 주말이면 다음 월요일. 계절학기는 None"""
+    if term not in ESTIMATED_START:
+        return None
+    month, day = ESTIMATED_START[term]
+    start = date(year, month, day)
+    return start + timedelta(days=(7 - start.weekday()) % 7 if start.weekday() >= 5 else 0)
+
+
+def estimated_calendar(school: str, year: int, term: SemesterTerm) -> AcademicCalendar | None:
+    """추정 개강일로 만든 학사일정 (DB에 저장하지 않음).
+
+    시험 시작일은 비워 두어 8 · 15주차 규칙으로 채워진다.
+    """
+    start = estimated_start(year, term)
+    if start is None:
+        return None
+    return AcademicCalendar(school=school, year=year, term=term, starts_on=start)
 
 
 def exam_periods(calendar: AcademicCalendar) -> list[tuple[ExamKind, date, date]]:
