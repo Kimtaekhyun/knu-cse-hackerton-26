@@ -256,8 +256,6 @@ struct AccountScreen: View {
                 .foregroundStyle(.black)
             Color.clear.frame(width: 1, height: 4)
             Text(shownSchool ?? "학교 미입력").ds(15, .regular, .dsSub)
-            Color.clear.frame(width: 1, height: 4)
-            Text("카카오 계정으로 로그인됨").ds(13, .regular, .dsSub)
             Color.clear.frame(width: 1, height: 20)
             SecondaryButton(title: "프로필 수정", width: width - 48) {
                 draftName = name
