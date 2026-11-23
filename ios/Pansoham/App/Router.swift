@@ -60,6 +60,9 @@ final class Router {
     var timetableManual = false
     /// 06 에서 고른 학기. nil 이면 오늘 날짜 기준 학기(`Semester.current()`)를 써요.
     var semester: Semester?
+    /// 내 계정 › 시간표 수정으로 지금 학기를 고치는 중인지 (#146).
+    /// 다시 올리기 · 직접 등록하기로 화면을 옮겨도 유지돼서, 학기는 고정되고 기존 과목에서 시작해요.
+    var timetableEditing = false
     /// 메인 `앨범에서 선택` 으로 고른 판서 사진들. 처리 중(10)이 한 장씩 차례로 처리해요.
     var albumPhotos: [UIImage] = []
     /// 방금 처리한 사진 수. 2장 이상이면 결과(12)가 사진 탭을 보여 줘요.
@@ -100,12 +103,21 @@ final class Router {
     func backToUpload() {
         if stack.dropLast().last == .timetableUpload { pop() } else { replace(.timetableUpload, direction: .back) }
     }
-    /// 전체 학기의 "새 학기 추가": 이전에 고른 캡처 · 학기를 비우고 시간표 등록(05)부터
+    /// 전체 학기의 "새 학기 추가" · 메인 "시간표 등록": 이전에 고른 캡처 · 학기를 비우고 시간표 등록(05)부터
     func startNewSemester() {
         timetableImage = nil
         timetableManual = false
+        timetableEditing = false
         semester = nil
         push(.timetableUpload)
+    }
+    /// 내 계정 "시간표 수정": 지금 학기 과목을 불러와 시간표 확인(06)에서 고쳐요 (#146)
+    func startTimetableEdit() {
+        timetableImage = nil
+        timetableManual = false
+        timetableEditing = true
+        semester = nil
+        push(.timetableConfirm)
     }
     /// 쌓인 화면 중 가장 가까운 `screen` 까지 돌아가기. 없으면 새로 시작.
     func popTo(_ screen: Screen) {

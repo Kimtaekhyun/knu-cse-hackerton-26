@@ -148,22 +148,32 @@ struct TimetableConfirmScreen: View {
     @State private var saveError: String?
     /// 학기 고르기 창
     @State private var showSemesterPicker = false
+    /// 이미 있는 학기 (새 학기 추가에서 못 고르게, #146)
+    @State private var takenSemesters: Set<Semester> = []
+    /// 시간표 수정: 저장된 과목 이름. 목록에서 빠지면 저장 전에 확인해요 (#146)
+    @State private var savedNames: [String] = []
+    /// 저장하면 빠지는 과목 (확인 창)
+    @State private var removing: [String] = []
 
     /// 사진 없이 직접 등록하는 중인지 (05 "시간표 직접 등록하기")
     var isManual: Bool { router.timetableManual }
+    /// 내 계정 › 시간표 수정으로 지금 학기를 고치는 중인지. 학기를 바꿀 수 없어요 (#146)
+    var isEditing: Bool { router.timetableEditing && SemesterStore.shared.current != nil }
     /// 지금 고른 학기 (안 골랐으면 올해 1학기)
     var semester: Semester { router.semester ?? .current() }
 
     var titleText: String { isManual ? "시간표를 직접 등록해 주세요" : "인식된 시간표를 확인해 주세요" }
     var detailText: String { isManual ? "과목 추가로 수업을 하나씩 넣어 주세요." : "잘못 읽힌 과목은 눌러서 고칠 수 있어요." }
     var backTitle: String { isManual ? "뒤로" : "다시 올리기" }
+    /// 시간표 수정: 과목을 빼면 판서가 어디로 가는지 알려 줘요
+    var removalNote: String? { isEditing ? "목록에서 뺀 과목의 판서는 미분류함으로 옮겨져요." : nil }
     var emptyText: String {
         isManual ? "아직 넣은 과목이 없어요. 과목 추가로 넣어 주세요." : "과목을 찾지 못했어요. 과목 추가로 직접 넣어 주세요."
     }
 
     /// 제목 오른쪽 학기 버튼
     func semesterChip(compact: Bool = false) -> some View {
-        SemesterChip(title: semester.title, compact: compact) { showSemesterPicker = true }
+        SemesterChip(title: semester.title, compact: compact, locked: isEditing) { showSemesterPicker = true }
     }
 
     private let days = ["월", "화", "수", "목", "금"]
@@ -185,7 +195,13 @@ struct TimetableConfirmScreen: View {
                 Text(saveError ?? "")
             }
             .sheet(isPresented: $showSemesterPicker) {
-                SemesterPickerSheet(semester: semester) { router.semester = $0 }
+                SemesterPickerSheet(semester: semester, taken: takenSemesters) { router.semester = $0 }
+            }
+            .alert("과목 \(removing.count)개가 시간표에서 빠져요", isPresented: Binding(get: { !removing.isEmpty }, set: { if !$0 { removing = [] } })) {
+                Button("취소", role: .cancel) {}
+                Button("저장") { save() }
+            } message: {
+                Text("\(removing.joined(separator: " · "))의 판서는 미분류함으로 옮겨져요.")
             }
     }
 
@@ -215,7 +231,7 @@ struct TimetableConfirmScreen: View {
 
             BottomBar(caption: caption) {
                 PrimaryButton(title: saving ? "저장 중…" : "이대로 저장", width: 280, enabled: load == .loaded && !saving) {
-                    save()
+                    confirmSave()
                 }
             }
         }
@@ -323,6 +339,9 @@ struct TimetableConfirmScreen: View {
 
                 Text("시간이 정해지지 않은 과목(사이버강의 등)은 미분류함에서 직접 옮겨요.")
                     .ds(14, .regular, .dsSub)
+                if let removalNote {
+                    Text(removalNote).ds(14, .regular, .dsSub).padding(.top, 6)
+                }
             } else {
                 statusView(width: width)
             }
@@ -338,9 +357,41 @@ struct TimetableConfirmScreen: View {
     /// 05 에서 고른 캡처를 서버로 보내 과목 목록을 채워요.
     /// 캡처 없이 열면(내 계정 › 시간표 수정) 서버의 현재 학기 과목을, 그것도 없으면 샘플 과목을 보여 줘요.
     private func analyze() async {
-        // 학기 선택 처음 값: 오늘 날짜 기준 (서버 규칙). 시간표 수정이면 아래에서 저장된 학기로 바꿔요.
+        // 시간표 수정: 저장된 지금 학기로 고정하고, 직접 등록 · 다시 올리기로 와도 기존 과목에서 시작해요 (#146)
+        if router.timetableEditing {
+            let store = SemesterStore.shared
+            await store.reload()
+            if let current = store.current {
+                router.semester = current.semester
+                let saved = current.subjects?.map(\.timetableSubject) ?? []
+                savedNames = saved.map(\.name)
+                if let image = router.timetableImage {
+                    // 사진을 다시 올렸으면 인식 결과로 바꿔요 (빠지는 과목은 저장 전에 확인)
+                    load = .loading
+                    do {
+                        subjects = try await TimetableAPI.parse(image)
+                        load = .loaded
+                    } catch {
+                        load = .failed(error.localizedDescription)
+                    }
+                } else {
+                    subjects = saved
+                    load = .loaded
+                }
+                return
+            }
+            // 아직 시간표가 없으면 처음 등록과 같아요
+        }
+        // 새로 등록: 이미 있는 학기는 고를 수 없어요 (같은 학기에 저장하면 그 학기 시간표를 덮어써요, #146)
+        if AuthSession.shared.isLoggedIn, router.timetableImage != nil || isManual,
+           let list = try? await SemesterAPI.list() {
+            takenSemesters = Set(list.compactMap(\.semester))
+        }
+        // 학기 선택 처음 값: 오늘 날짜 기준 (서버 규칙). 이미 있으면 비어 있는 다음 학기로
         if router.semester == nil, router.timetableImage != nil || isManual {
-            router.semester = await SemesterAPI.suggested()
+            var suggested = await SemesterAPI.suggested()
+            for _ in 0..<8 where takenSemesters.contains(suggested) { suggested = suggested.next }
+            router.semester = suggested
         }
         // 직접 등록: 빈 목록에서 과목 추가로 채워요
         if isManual {
@@ -396,7 +447,24 @@ struct TimetableConfirmScreen: View {
         }
     }
 
-    /// `이대로 저장`. 로그인했으면 서버에 학기 · 과목을 저장하고 메인으로, 아니면 화면만 넘겨요.
+    /// `이대로 저장` 버튼. 시간표 수정에서 저장된 과목이 빠지면 먼저 확인해요 (#146)
+    private func confirmSave() {
+        if isEditing {
+            let names = Set(subjects.map(\.name))
+            let removed = savedNames.filter { !names.contains($0) }
+            if !removed.isEmpty {
+                removing = removed
+                return
+            }
+        }
+        if !isEditing, takenSemesters.contains(semester) {
+            saveError = "\(semester.title)은 이미 있는 학기예요. 다른 학기를 고르거나 전체 학기에서 열어 고쳐 주세요."
+            return
+        }
+        save()
+    }
+
+    /// 서버에 학기 · 과목을 저장하고 메인으로 (로그인 안 했으면 화면만 넘겨요)
     private func save() {
         guard AuthSession.shared.isLoggedIn else {
             router.reset(to: .homeFirst)
@@ -412,6 +480,7 @@ struct TimetableConfirmScreen: View {
                 let saved = try await SemesterAPI.saveTimetable(subjects, semester: semester, makeCurrent: makeCurrent)
                 if makeCurrent { SemesterStore.shared.use(saved) } else { await SemesterStore.shared.reload() }
                 router.timetableImage = nil
+                router.timetableEditing = false
                 router.reset(to: .home)
             } catch {
                 saveError = error.localizedDescription
@@ -582,7 +651,7 @@ extension TimetableConfirmScreen {
 
                 PortraitBottomBar(caption: caption) {
                     PrimaryButton(title: saving ? "저장 중…" : "이대로 저장", width: 280, enabled: load == .loaded && !saving) {
-                        save()
+                        confirmSave()
                     }
                 }
                 .at(0, 1090)
@@ -648,7 +717,7 @@ extension TimetableConfirmScreen {
             }
         }, bottom: {
             NarrowBottomBar(caption: caption) {
-                PrimaryButton(title: saving ? "저장 중…" : "이대로 저장", width: inner < 440 ? 150 : 200, enabled: load == .loaded && !saving) { save() }
+                PrimaryButton(title: saving ? "저장 중…" : "이대로 저장", width: inner < 440 ? 150 : 200, enabled: load == .loaded && !saving) { confirmSave() }
             }
         })
     }

@@ -9,6 +9,8 @@ import SwiftUI
 
 struct SemesterPickerSheet: View {
     let onSave: (Semester) -> Void
+    /// 이미 있는 학기 (새 학기 추가에서는 고를 수 없어요, #146)
+    let taken: Set<Semester>
 
     @Environment(\.dismiss) private var dismiss
     @State private var year: Int
@@ -17,8 +19,9 @@ struct SemesterPickerSheet: View {
     /// 고를 수 있는 연도: 올해 기준 10년 전 ~ 5년 뒤 (고르던 연도가 밖이면 그 연도도 넣어요)
     private let years: [Int]
 
-    init(semester: Semester, onSave: @escaping (Semester) -> Void) {
+    init(semester: Semester, taken: Set<Semester>, onSave: @escaping (Semester) -> Void) {
         self.onSave = onSave
+        self.taken = taken
         _year = State(initialValue: semester.year)
         _term = State(initialValue: semester.term)
         let now = Calendar.current.component(.year, from: .now)
@@ -44,10 +47,17 @@ struct SemesterPickerSheet: View {
                 .background(Color(.secondarySystemGroupedBackground),
                             in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                Text("미리 보기: \(Semester(year: year, term: term).title)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 16)
+                if isTaken {
+                    Text("이미 있는 학기예요. 전체 학기에서 열어 고쳐 주세요.")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .padding(.leading, 16)
+                } else {
+                    Text("미리 보기: \(Semester(year: year, term: term).title)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 16)
+                }
             }
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -63,6 +73,7 @@ struct SemesterPickerSheet: View {
                         onSave(Semester(year: year, term: term))
                         dismiss()
                     }
+                    .disabled(isTaken)
                 }
             }
         }
@@ -73,6 +84,8 @@ struct SemesterPickerSheet: View {
         .presentationDetents([.height(Self.height)])
     }
 
+    private var isTaken: Bool { taken.contains(Semester(year: year, term: term)) }
+
     /// 위 막대 + 휠(180) + 미리 보기 + 여백
     private static let height: CGFloat = 320
 }
@@ -81,13 +94,17 @@ struct SemesterPickerSheet: View {
 struct SemesterChip: View {
     let title: String
     var compact = false
+    /// 시간표 수정에서는 학기를 바꿀 수 없어요 (화살표 없이 글자만, #146)
+    var locked = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(title).ds(compact ? 15 : 17, .bold)
-                Image(systemName: "chevron.down").font(.system(size: compact ? 11 : 13, weight: .bold))
+                if !locked {
+                    Image(systemName: "chevron.down").font(.system(size: compact ? 11 : 13, weight: .bold))
+                }
             }
             .padding(.horizontal, compact ? 12 : 16)
             .padding(.vertical, compact ? 7 : 10)
@@ -95,5 +112,6 @@ struct SemesterChip: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .disabled(locked)
     }
 }
