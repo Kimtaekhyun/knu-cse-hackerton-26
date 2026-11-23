@@ -4,12 +4,14 @@
 요청마다 진짜 연결 · 커밋을 쓰고 끝나면 만든 사용자를 지운다 (학기 · 과목도 같이 지워진다).
 """
 
+import io
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import sessionmaker
 
@@ -113,13 +115,17 @@ def test_same_capture_resent_at_once(live, tmp_path, monkeypatch):
     get_settings.cache_clear()
     client.post("/api/v1/semesters", json={"year": 2026, "term": "second"}, headers=auth)
     capture_id = str(uuid4())
+    # 업로드가 사진 헤더(해상도)를 확인하므로 진짜 JPEG를 보낸다 (#130)
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), "white").save(buffer, "JPEG")
+    photo = buffer.getvalue()
 
     def send():
         return client.post(
             "/api/v1/captures",
             headers=auth,
             data={"id": capture_id},
-            files={"image": ("a.jpg", b"jpeg", "image/jpeg")},
+            files={"image": ("a.jpg", photo, "image/jpeg")},
         )
 
     codes = at_once(send)

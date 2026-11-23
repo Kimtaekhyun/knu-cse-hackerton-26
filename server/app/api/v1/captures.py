@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from app.api.deps import DbDep, UserDep, WriteUserDep
 from app.schemas.capture import CaptureDetail, CaptureMove, CaptureOut, CaptureRetry, Destination
 from app.services import captures as service
+from app.services import image_limits
 from app.services.pipeline import worker
 from app.storage import local as storage
 
@@ -25,7 +26,10 @@ MAX_BYTES = 10 * 1024 * 1024
 
 
 def read_image(image: UploadFile) -> tuple[bytes, str]:
-    """(이미지, 확장자). 형식 · 크기가 맞지 않으면 4xx"""
+    """(이미지, 확장자). 형식 · 용량 · 해상도가 맞지 않으면 4xx
+
+    저장하기 전에 검사하므로 거절한 사진은 파일도 DB 행도 남지 않는다.
+    """
     extension = EXTENSIONS.get(image.content_type or "")
     if extension is None:
         raise HTTPException(415, "이미지 파일(JPEG, PNG, WEBP)만 올릴 수 있어요.")
@@ -34,6 +38,13 @@ def read_image(image: UploadFile) -> tuple[bytes, str]:
         raise HTTPException(400, "빈 파일이에요.")
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "이미지가 10MB를 넘어요.")
+    # 용량이 작아도 해상도가 크면 처리할 때 서버 메모리가 바닥난다 (#130). 헤더만 읽어 확인한다
+    try:
+        image_limits.check_pixels(data)
+    except image_limits.TooManyPixels as error:
+        raise HTTPException(413, "사진 해상도가 너무 커요.") from error
+    except image_limits.UnreadableImage as error:
+        raise HTTPException(400, "사진을 읽지 못했어요.") from error
     return data, extension
 
 

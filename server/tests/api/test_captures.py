@@ -198,6 +198,38 @@ def test_too_large_image_is_413(client, auth, semester, monkeypatch):
     assert response.status_code == 413
 
 
+def sized_jpeg(width: int, height: int) -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), "white").save(buffer, "JPEG")
+    return buffer.getvalue()
+
+
+def test_too_many_pixels_is_413_and_nothing_is_kept(
+    client, auth, db, semester, media_dir, enqueued, monkeypatch
+):
+    # 용량은 작아도 해상도가 크면 처리할 때 서버 메모리가 바닥난다 (#130).
+    # 한도를 줄여 작은 사진으로 확인한다
+    monkeypatch.setattr("app.services.image_limits.MAX_PIXELS", 100)
+    response = upload(client, auth, image=sized_jpeg(11, 10))
+    assert response.status_code == 413
+    assert response.json()["detail"] == "사진 해상도가 너무 커요."
+    assert count_captures(db) == 0
+    assert [p for p in media_dir.rglob("*") if p.is_file()] == []
+    assert enqueued == []
+
+
+def test_pixels_at_limit_are_accepted(client, auth, semester, monkeypatch):
+    monkeypatch.setattr("app.services.image_limits.MAX_PIXELS", 100)
+    assert upload(client, auth, image=sized_jpeg(10, 10)).status_code == 202
+
+
+def test_unreadable_image_is_400(client, auth, db, semester):
+    response = upload(client, auth, image=b"not-an-image")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "사진을 읽지 못했어요."
+    assert count_captures(db) == 0
+
+
 def test_upload_requires_login(client, semester):
     assert upload(client, {}).status_code == 401
 

@@ -3,7 +3,8 @@
 단계마다 status를 커밋하므로 앱은 GET /captures/{id}로 지금 단계를 볼 수 있다 (처리 중 화면 10-1~3).
   uploaded → rectifying(화면 펴기) → segmenting(AI가 덩어리 찾기)
   → interpreting(상자 다듬기 · 카드 저장) → done
-  실패하면 failed + fail_reason(rectify / segment / interpret / unknown)
+  실패하면 failed + fail_reason(too_large / rectify / segment / interpret / unknown)
+  too_large: 사진 해상도가 상한(image_limits.MAX_PIXELS)을 넘어 열지 않음
 
 - 작업 스레드는 PIPELINE_WORKERS개(기본 1). 1이면 올린 순서대로 처리된다.
 - 서버가 처리 중에 꺼지면 다시 켤 때 resume_unfinished()가 멈춘 판서를 다시 줄에 세운다.
@@ -25,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models import Capture, CaptureStatus, Card
+from app.services import image_limits
 from app.services.captures import capture_dir, card_crop_key, rectified_key
 from app.services.llm import LLMError
 from app.services.pipeline import vision
@@ -110,7 +112,15 @@ def set_status(db: Session, capture: Capture, status: CaptureStatus) -> None:
 def rectify(db: Session, capture: Capture, skip_rectify: bool) -> np.ndarray:
     """원본을 읽어 화면을 찾아 펴고 줄인 사진을 돌려준다. 화면을 못 찾으면 StageFailed("rectify")"""
     set_status(db, capture, CaptureStatus.rectifying)
-    original = vision.decode(storage.path(capture.original_key).read_bytes())
+    data = storage.path(capture.original_key).read_bytes()
+    # 거대한 사진을 열면 메모리가 바닥나 서버가 죽고,
+    # 다시 켤 때 같은 판서를 또 열어 또 죽는다 (#130). 업로드에서도 막지만,
+    # 이미 저장된 원본 · "다시 처리"에 대비해 열기 전에 한 번 더 확인한다
+    try:
+        image_limits.check_pixels(data)
+    except image_limits.TooManyPixels as error:
+        raise StageFailed("too_large") from error
+    original = vision.decode(data)
     corners = vision.find_screen(original) if PEN != "board" else None
     if corners is None and not skip_rectify:
         raise StageFailed("rectify")
