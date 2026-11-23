@@ -61,7 +61,7 @@ struct PendingNote: Identifiable {
 
 extension SampleData {
     static let pending: [PendingNote] = [
-        .init(title: "자료구조 · 오늘 10:42", detail: "카드 4개 · 굿노트로 옮기지 않았어요", x: -0.5, y: -0.1667),
+        .init(title: "자료구조 · 오늘 10:42", detail: "카드 4개 · 필기 앱으로 옮기지 않았어요", x: -0.5, y: -0.1667),
         .init(title: "컴퓨터구조 · 11월 11일", detail: "카드 6개 · 6일째 그대로예요", x: -0.0333, y: -0.6667),
         .init(title: "이산수학 · 11월 13일", detail: "카드 3개 · 4일째 그대로예요", x: -0.3333, y: -0.4),
     ]
@@ -77,7 +77,7 @@ struct PendingScreen: View {
             if case .failed(let message) = SubjectCaptures.unmoved.state { return "불러오지 못했어요 · \(message)" }
             return "불러오는 중…"
         }
-        return notes.isEmpty ? "모든 판서를 옮겼어요" : "굿노트로 옮기지 않은 판서가 \(notes.count)개 있어요"
+        return notes.isEmpty ? "모든 판서를 옮겼어요" : "필기 앱으로 옮기지 않은 판서가 \(notes.count)개 있어요"
     }
 
     var body: some View {

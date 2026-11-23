@@ -479,7 +479,7 @@ struct SubjectCardsScreen: View {
     private func folderDetail(_ sample: String) -> String { folderDetailText(router, sample: sample) }
     @State private var filter = "전체"
     @State private var selection: Set<Int> = [1, 2, 3]
-    @State private var copiedCount: Int?     // 좁은 화면에서 방금 복사한 카드 수
+    @State private var copiedCount: Int?     // 방금 복사한 카드 수 (알림이 떠 있는 동안)
     @State private var searching = false
     @State private var query = ""
 
@@ -581,9 +581,7 @@ struct SubjectCardsScreen: View {
                     }
                     .buttonStyle(.plain)
                     PrimaryButton(title: "\(selection.count)개 복사", enabled: !selection.isEmpty) {
-                        Clipboard.copy(selectedCards)
-                        CardAPI.markMovedQuietly(selectedCards)
-                        router.push(.splitView)
+                        copySelection()
                     }
                 }
             }
@@ -592,6 +590,13 @@ struct SubjectCardsScreen: View {
             .background(Color.white)
             .overlay(alignment: .top) { Rectangle().fill(Color.dsLine).frame(height: 1) }
             .at(0, 730)
+
+            if let copiedCount {
+                copiedToast(copiedCount, hint: "필기 앱에 붙여 넣으세요")
+                    .frame(width: DS.width)
+                    .at(0, 654)
+                    .transition(.opacity.combined(with: .offset(y: 40)))
+            }
         }
         .task { await reload() }
     }
@@ -810,17 +815,8 @@ extension SubjectCardsScreen {
             .overlay(alignment: .top) { Rectangle().fill(Color.dsLine).frame(height: 1) }
             .overlay(alignment: .top) {
                 if let copiedCount {
-                    HStack(spacing: 10) {
-                        Image("check-circle-24")
-                        Text("카드 \(copiedCount)개를 복사했어요").ds(15, .bold, .white)
-                    }
-                    .padding(.leading, 18)
-                    .padding(.trailing, 24)
-                    .padding(.vertical, 14)
-                    .background(Color.black)
-                    .clipShape(Capsule())
-                    .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 12)
-                    .offset(y: -68)
+                    copiedToast(copiedCount, hint: nil)
+                        .offset(y: -68)
                     .transition(.opacity.combined(with: .offset(y: 40)))
                 }
             }
@@ -833,11 +829,29 @@ extension SubjectCardsScreen {
         all.filter { selection.contains($0.id) }
     }
 
-    /// 고른 카드의 글자를 클립보드에 넣고 알림을 잠깐 띄워요.
+    /// 복사 완료 알림 (결과 화면과 같은 모양)
+    private func copiedToast(_ count: Int, hint: String?) -> some View {
+        HStack(spacing: 12) {
+            Image("check-circle-24")
+            Text("카드 \(count)개를 복사했어요").ds(15, .bold, .white)
+            if let hint { Text(hint).ds(15, .medium, .dsSub) }
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 24)
+        .padding(.vertical, 14)
+        .background(Color.black)
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 12)
+    }
+
+    /// 고른 카드의 글자를 클립보드에 넣고 알림을 잠깐 띄워요. 복사한 뒤 선택은 풀어요 (#163)
     private func copySelection() {
-        Clipboard.copy(selectedCards)
-        CardAPI.markMovedQuietly(selectedCards)
-        withAnimation(.easeOut(duration: 0.5).delay(0.1)) { copiedCount = selection.count }
+        let cards = selectedCards
+        guard !cards.isEmpty else { return }
+        Clipboard.copy(cards)
+        CardAPI.markMovedQuietly(cards)
+        selection = []
+        withAnimation(.easeOut(duration: 0.5).delay(0.1)) { copiedCount = cards.count }
         Task {
             try? await Task.sleep(for: .seconds(2.2))
             withAnimation(.easeIn(duration: 0.25)) { copiedCount = nil }

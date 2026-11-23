@@ -174,7 +174,7 @@ struct ResultScreen: View {
             }
             Button("취소", role: .cancel) {}
         } message: {
-            Text(alreadyMoved ? "이미 굿노트로 옮긴 카드가 있어요. 남겨 두면 폴더에 그대로 있어요."
+            Text(alreadyMoved ? "이미 필기 앱으로 옮긴 카드가 있어요. 남겨 두면 폴더에 그대로 있어요."
                               : "지우면 이 판서와 카드 \(stickers.count)개가 사라져요.")
         }
         .alert("카드를 삭제할까요?", isPresented: Binding(get: { deletingCard != nil }, set: { if !$0 { deletingCard = nil } })) {
@@ -278,7 +278,7 @@ struct ResultScreen: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(title).ds(34, .bold)
-                Text(detail("카드를 굿노트로 끌어다 놓으세요")).ds(17, .regular, .dsSub)
+                Text(detail("카드를 필기 앱으로 끌어다 놓으세요")).ds(17, .regular, .dsSub)
             }
             .at(48, 96)
 
@@ -315,13 +315,12 @@ struct ResultScreen: View {
             BottomBar(caption: savedText) {
                 HStack(spacing: 12) {
                     if canRetake { retakeButton }
-                    PrimaryButton(title: copyTitle, width: 280) { copyAll(thenGuide: true) }
+                    PrimaryButton(title: copyTitle, width: 280) { copyAll() }
                 }
             }
 
             if let copiedCount {
-                Button { router.push(.splitView) } label: { toast(copiedCount, hint: "굿노트에 붙여 넣으세요") }
-                    .buttonStyle(.plain)
+                toast(copiedCount, hint: "필기 앱에 붙여 넣으세요")
                     .frame(width: DS.width)
                     .at(0, 654)
                     .transition(.opacity.combined(with: .offset(y: 40)))
@@ -363,7 +362,7 @@ struct ResultScreen: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(title).ds(28, .bold)
-                        Text(detail("카드를 길게 눌러 굿노트로 끌어다 놓으세요"))
+                        Text(detail("카드를 길게 눌러 필기 앱으로 끌어다 놓으세요"))
                             .font(.system(size: 15))
                             .tracking(-0.15)
                             .foregroundStyle(Color.dsSub)
@@ -411,7 +410,7 @@ struct ResultScreen: View {
                 Spacer(minLength: 0)
                 if canRetake { retakeButton }
                 PrimaryButton(title: copyTitle, width: inner < 440 ? 150 : 200) {
-                    copyAll(thenGuide: false)
+                    copyAll()
                 }
             }
             .padding(.horizontal, side)
@@ -419,7 +418,7 @@ struct ResultScreen: View {
             .overlay(alignment: .top) { Rectangle().fill(Color.dsLine).frame(height: 1) }
             .overlay(alignment: .top) {
                 if let copiedCount {
-                    toast(copiedCount, hint: inner < 440 ? nil : "굿노트에 붙여 넣으세요")
+                    toast(copiedCount, hint: inner < 440 ? nil : "필기 앱에 붙여 넣으세요")
                         .offset(y: -68)
                         .transition(.opacity.combined(with: .offset(y: 40)))
                 }
@@ -476,29 +475,24 @@ struct ResultScreen: View {
         .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 12)
     }
 
-    /// 카드 글자를 클립보드에 넣고 알림을 잠깐 띄워요.
-    /// `thenGuide` 면 알림 뒤에 스플릿 뷰 안내로 넘어가고, 아니면 알림만 사라져요.
-    private func copy(_ cards: [Sticker], thenGuide: Bool = false) {
+    /// 카드 글자를 클립보드에 넣고 알림을 잠깐 띄워요. (다른 화면으로 넘어가지 않아요, #163)
+    private func copy(_ cards: [Sticker]) {
         Clipboard.copy(cards)
         CardAPI.markMovedQuietly(cards)
         withAnimation(.easeOut(duration: 0.5).delay(0.1)) { copiedCount = cards.count }
         Task {
             try? await Task.sleep(for: .seconds(2.2))
-            if thenGuide {
-                if router.current == .result || router.current == .copied { router.push(.splitView) }
-            } else {
-                withAnimation(.easeIn(duration: 0.25)) { copiedCount = nil }
-            }
+            withAnimation(.easeIn(duration: 0.25)) { copiedCount = nil }
         }
     }
 
-    /// 모두 복사. 넓은 화면에서만 스플릿 뷰 안내로 넘어가요 (좁은 화면은 이미 나눠 쓰는 중).
-    private func copyAll(thenGuide: Bool) {
+    /// 모두 복사
+    private func copyAll() {
         guard copiedCount == nil else { return }
         // 여러 장이면 사진 순서대로 모든 카드를 이어 붙여요.
         let all = (0..<photoCount).flatMap { stickers(of: $0) }
         guard !all.isEmpty else { return }
-        copy(all, thenGuide: thenGuide)
+        copy(all)
     }
 }
 
