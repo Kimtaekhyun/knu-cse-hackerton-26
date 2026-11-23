@@ -33,6 +33,10 @@ final class SilentCamera {
     private(set) var status: Status = .idle
     /// 셔터를 누르고 사진을 고르는 중 (중복 촬영 막기)
     private(set) var isCapturing = false
+    /// 지금 배율 (1 = 확대 없음, #138)
+    private(set) var zoom: CGFloat = 1
+    /// 확대 상한: 3× 와 기기 최대값 중 작은 쪽. 디지털 확대라 너무 키우면 글씨가 흐려져요
+    private(set) var maxZoom: CGFloat = 1
 
     let engine = CameraEngine()
     private var observers: [NSObjectProtocol] = []
@@ -105,6 +109,16 @@ final class SilentCamera {
         } else {
             status = .unavailable
         }
+        // 다시 열면 1× 부터 (#138)
+        maxZoom = min(3, engine.maxZoom)
+        setZoom(1)
+    }
+
+    /// 배율 바꾸기. `animated` 면 부드럽게 (배율 버튼), 아니면 바로 (핀치)
+    func setZoom(_ factor: CGFloat, animated: Bool = false) {
+        let clamped = min(max(factor, 1), maxZoom)
+        zoom = clamped
+        engine.zoom(to: clamped, animated: animated)
     }
 
     /// 화면을 떠날 때 (배터리 · 발열 때문에 꼭 멈춰요)
@@ -280,6 +294,24 @@ nonisolated final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBu
     private var shotID = 0
     /// 셔터 뒤 프레임을 기다리는 최대 시간
     private static let shotTimeout: TimeInterval = 2
+
+    /// 기기가 허용하는 최대 배율
+    var maxZoom: CGFloat { device?.maxAvailableVideoZoomFactor ?? 1 }
+
+    /// 확대. 영상 프레임 자체가 확대되므로 미리보기 · 찍힌 사진이 같은 범위예요 (#138)
+    func zoom(to factor: CGFloat, animated: Bool) {
+        sessionQueue.async {
+            guard let device = self.device, (try? device.lockForConfiguration()) != nil else { return }
+            let target = min(max(factor, device.minAvailableVideoZoomFactor), device.maxAvailableVideoZoomFactor)
+            if animated {
+                device.ramp(toVideoZoomFactor: target, withRate: 6)
+            } else {
+                device.cancelVideoZoomRamp()
+                device.videoZoomFactor = target
+            }
+            device.unlockForConfiguration()
+        }
+    }
 
     /// 누른 곳(0~1 카메라 좌표)에 초점 · 노출
     func focus(at point: CGPoint) {
