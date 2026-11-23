@@ -13,6 +13,8 @@ struct HomeScreen: View {
     var isFirst = false
 
     @Environment(Router.self) private var router
+    /// 내 계정에서 고친 이름 (메인 아이콘에 첫 글자, #144)
+    @AppStorage("profileName") private var profileName = "김마린"
     @State private var appeared = false
     /// 촬영 버튼이 펼쳐져 있는지 (08-1)
     @State private var menuOpen = false
@@ -107,7 +109,7 @@ struct HomeScreen: View {
                            : t < 1.4 ? tween(t, -8, 0, 0.7, 1.4, .inOut)
                            : t < 2.1 ? tween(t, 0, -8, 1.4, 2.1, .inOut)
                            : tween(t, -8, 0, 2.1, 2.8, .inOut))
-            } else if !firstScreen {
+            } else if showsBellDot {
                 Image("bell-dot").at(1092, 49).allowsHitTesting(false)
             }
 
@@ -131,7 +133,7 @@ struct HomeScreen: View {
                 Button { router.push(.pending) } label: { Image("bell") }
                     .buttonStyle(.plain)
                 Button { router.push(.account) } label: {
-                    Text("김").ds(15, .bold, .white)
+                    Text(profileInitial).ds(15, .bold, .white)
                         .frame(width: 34, height: 34)
                         .background(Color.black)
                         .clipShape(Circle())
@@ -388,7 +390,7 @@ struct HomeScreen: View {
         }
         return store.subjects.enumerated().map { index, subject in
             Folder(name: subject.name, detail: subject.timeText, count: subject.captureCount,
-                   style: index == 0 ? .blue : .gray) {
+                   style: subject.id == ongoingSubjectID ? .blue : .gray) {
                 router.subject = subject
                 router.push(subject.captureCount == 0 ? .subjectEmpty : .subjectLessons)
             }
@@ -457,12 +459,12 @@ extension HomeScreen {
                 HStack(spacing: 20) {
                     Button { router.push(.pending) } label: {
                         Image("bell").overlay(alignment: .topLeading) {
-                            if !firstScreen { Image("bell-dot").offset(x: 16, y: -1) }
+                            if showsBellDot { Image("bell-dot").offset(x: 16, y: -1) }
                         }
                     }
                     .buttonStyle(.plain)
                     Button { router.push(.account) } label: {
-                        Text("김").ds(15, .bold, .white)
+                        Text(profileInitial).ds(15, .bold, .white)
                             .frame(width: 34, height: 34)
                             .background(Color.black)
                             .clipShape(Circle())
@@ -577,6 +579,20 @@ extension HomeScreen {
         var right = ""
     }
 
+    /// 메인 오른쪽 위 아이콘 글자: 이름 첫 글자 ("배한결" → "배")
+    var profileInitial: String {
+        String(profileName.trimmingCharacters(in: .whitespaces).prefix(1)).ifEmpty("김")
+    }
+
+    /// 종 아이콘 점: 옮기지 않은 판서가 있을 때만 (#144)
+    var showsBellDot: Bool { !firstScreen && !PendingNote.current.isEmpty }
+
+    /// 지금 수업 중인 과목. 이 과목 폴더만 하늘색이에요 (#144)
+    var ongoingSubjectID: UUID? {
+        let now = Self.nowMinute()
+        return todayClasses.first { $0.startMinute <= now && now < $0.endMinute }?.subjectId
+    }
+
     /// 오늘 수업 (시작 시각 순)
     var todayClasses: [HomeAPI.ClassDTO] { (home?.today ?? []).sorted { $0.startMinute < $1.startMinute } }
 
@@ -668,4 +684,8 @@ extension HomeScreen {
         let rest = minutes % 60
         return rest == 0 ? "\(minutes / 60)시간 남음" : "\(minutes / 60)시간 \(rest)분 남음"
     }
+}
+
+private extension String {
+    func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
 }
