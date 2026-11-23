@@ -233,10 +233,6 @@ struct CaptureErrorScreen: View {
     }
     /// 화면을 못 찾았으면 "그대로 쓰기"(사진 그대로 처리), 아니면 "다시 시도"
     private var useTitle: String { isRectify ? "그대로 쓰기" : "다시 시도" }
-    private var caption: String {
-        guard failed != nil else { return "사진은 미분류함에 남겨 둘게요" }
-        return "사진은 \(flow.placeTitle(of: failed?.capture))에 남겨 둘게요"
-    }
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
@@ -281,8 +277,12 @@ struct CaptureErrorScreen: View {
         }
     }
 
-    /// 다시 찍기: 촬영 화면으로 (앨범에서 왔으면 홈으로)
+    /// 다시 찍기: 실패한 판서를 지우고 촬영 화면으로 (앨범에서 왔으면 홈으로).
+    /// 지우지 못해도 조용히 넘어가요 (처리 중 취소 #101 과 같음, #126)
     private func retake() {
+        if let id = failed?.capture?.id {
+            Task { try? await SubjectCaptures.delete([id]) }
+        }
         flow.failed = nil
         router.pop()
     }
@@ -325,7 +325,7 @@ struct CaptureErrorScreen: View {
             .frame(width: DS.width)
             .at(0, 60)
 
-            BottomBar(caption: caption) {
+            BottomBar(caption: "") {
                 HStack(spacing: 12) {
                     // 해상도 초과는 다시 처리해도 같아서 "그대로 쓰기 · 다시 시도"를 숨겨요
                     if !isTooLarge {
@@ -462,7 +462,6 @@ extension CaptureErrorScreen {
                 .frame(maxWidth: .infinity)
             }
             VStack(spacing: 10) {
-                Text(caption).ds(14, .medium, .dsSub)
                 HStack(spacing: 10) {
                     if isTooLarge {
                         PrimaryButton(title: "다시 찍기", width: inner, action: retake)

@@ -84,6 +84,8 @@ struct ResultScreen: View {
     @State private var deleteError: String?
     /// 지울 카드 (확인 창, #99)
     @State private var deletingCard: Sticker?
+    /// 다시 찍기 확인 창 (#126)
+    @State private var confirmRetake = false
 
     private var flow: CaptureFlow { .shared }
     /// 서버가 처리한 사진들. 비어 있으면(로그인 전 · 다른 화면에서 열 때) 샘플을 보여 줘요.
@@ -162,6 +164,19 @@ struct ResultScreen: View {
             Text("\(isBatch ? "이 사진의 " : "")카드 \(stickers.count)개도 함께 지워지고 되돌릴 수 없어요.")
         }
         .deleteFailedAlert($deleteError)
+        .alert("이 판서를 지우고 다시 찍을까요?", isPresented: $confirmRetake) {
+            if alreadyMoved {
+                Button("남기고 다시 찍기") { retake(deleting: false) }.keyboardShortcut(.defaultAction)
+                Button("지우고 다시 찍기", role: .destructive) { retake(deleting: true) }
+            } else {
+                Button("지우고 다시 찍기", role: .destructive) { retake(deleting: true) }
+                Button("남기고 다시 찍기") { retake(deleting: false) }
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text(alreadyMoved ? "이미 굿노트로 옮긴 카드가 있어요. 남겨 두면 폴더에 그대로 있어요."
+                              : "지우면 이 판서와 카드 \(stickers.count)개가 사라져요.")
+        }
         .alert("카드를 삭제할까요?", isPresented: Binding(get: { deletingCard != nil }, set: { if !$0 { deletingCard = nil } })) {
             Button("취소", role: .cancel) { deletingCard = nil }
             Button("삭제", role: .destructive) { if let card = deletingCard { deleteCard(card) } }
@@ -175,6 +190,30 @@ struct ResultScreen: View {
                 flow.results = []
                 flow.openedFolder = nil
             }
+        }
+    }
+
+    /// 다시 찍기: 찍은 직후 한 장 결과에서만 (예전 판서를 열었거나 여러 장이면 숨겨요, #126)
+    private var canRetake: Bool { isLive && !isBatch && flow.openedFolder == nil }
+    /// 이 판서 카드를 이미 복사 · 끌어다 놓았는지 → "남기고 다시 찍기"가 기본
+    private var alreadyMoved: Bool {
+        stickers.contains { $0.cardID.map(flow.movedCards.contains) ?? false }
+    }
+    private var retakeButton: some View {
+        GrayButton(title: "다시 찍기") { confirmRetake = true }
+    }
+
+    /// 촬영 화면으로. 지우면 판서 · 카드를 서버에서 지워요 (실패해도 조용히 넘어가요)
+    private func retake(deleting: Bool) {
+        if deleting, let id = livePhoto?.id {
+            Task { try? await SubjectCaptures.delete([id]) }
+        }
+        if router.stack.contains(.capture) {
+            router.popTo(.capture)
+        } else {
+            // 앨범에서 골랐으면 메인 위에 촬영 화면을 새로 열어요
+            router.popTo(.home)
+            router.push(.capture)
         }
     }
 
@@ -270,7 +309,10 @@ struct ResultScreen: View {
             .at(444, top)
 
             BottomBar(caption: savedText) {
-                PrimaryButton(title: copyTitle, width: 280) { copyAll(thenGuide: true) }
+                HStack(spacing: 12) {
+                    if canRetake { retakeButton }
+                    PrimaryButton(title: copyTitle, width: 280) { copyAll(thenGuide: true) }
+                }
             }
 
             if let copiedCount {
@@ -362,6 +404,7 @@ struct ResultScreen: View {
                     .foregroundStyle(Color.dsSub)
                     .lineLimit(2)
                 Spacer(minLength: 0)
+                if canRetake { retakeButton }
                 PrimaryButton(title: copyTitle, width: inner < 440 ? 150 : 200) {
                     copyAll(thenGuide: false)
                 }
