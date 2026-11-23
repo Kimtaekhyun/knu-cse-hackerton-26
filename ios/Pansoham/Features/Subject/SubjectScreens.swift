@@ -535,6 +535,8 @@ struct SubjectCardsScreen: View {
                 }
             }
             .at(48, 196)
+            // 붙여넣기 색 (#143)
+            PasteColorPicker().frame(width: 1098, height: 33, alignment: .trailing).at(48, 196)
 
             // 카드 격자
             ScrollView(.vertical, showsIndicators: false) {
@@ -767,6 +769,8 @@ extension SubjectCardsScreen {
                     .buttonStyle(.plain)
                 }
             }
+            // 붙여넣기 색 (#143)
+            PasteColorPicker().frame(maxWidth: .infinity, alignment: .trailing)
 
             // 카드 (너비에 따라 한 줄 또는 두 줄)
             HStack(alignment: .top, spacing: 12) {

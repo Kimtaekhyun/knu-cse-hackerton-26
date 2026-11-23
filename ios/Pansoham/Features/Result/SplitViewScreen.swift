@@ -38,6 +38,8 @@ struct SplitViewScreen: View {
                 .at(20, 20)
             }
             .frame(width: 388, height: 794, alignment: .topLeading)
+            // 붙여넣기 색 (#143): 좁아서 점만
+            .overlay(alignment: .topTrailing) { PasteColorPicker(compact: true).padding(.top, 24).padding(.trailing, 20) }
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .at(8, 32)
 

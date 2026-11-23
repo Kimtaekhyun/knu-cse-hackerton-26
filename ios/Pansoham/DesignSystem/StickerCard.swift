@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - v2/Sticker Card
 
@@ -121,12 +122,24 @@ struct StickerCard: View {
     private func dragItem() -> NSItemProvider {
         // 굿노트로 옮긴 카드는 "옮김" 표시 (#99)
         CardAPI.markMovedQuietly([sticker])
+        let color = PasteColor.current
         guard handwriting else {
             // 굿노트는 LaTeX를 그리지 못해서, 수식이 있는 카드는 화면에 보이는 모양을 그림으로 넘겨요 (#113)
-            if sticker.hasMath, let image = MathText.image([sticker], width: width - 40) { return NSItemProvider(object: image) }
-            return NSItemProvider(object: sticker.text as NSString)
+            if sticker.hasMath, let image = MathText.image([sticker], width: width - 40, color: color.color) {
+                return NSItemProvider(object: image)
+            }
+            guard color != .black else { return NSItemProvider(object: sticker.text as NSString) }
+            // 붙여넣기 색 (#143): HTML → RTF → 일반 글자 순서로 등록해야 굿노트가 색 글자로 받아요
+            let provider = NSItemProvider()
+            for (type, data) in color.richRepresentations(sticker.text) {
+                provider.registerDataRepresentation(forTypeIdentifier: type.identifier, visibility: .all) { done in
+                    done(data, nil)
+                    return nil
+                }
+            }
+            return provider
         }
-        let renderer = ImageRenderer(content: inkPiece)
+        let renderer = ImageRenderer(content: inkPiece(color.color))
         renderer.scale = 3
         #if os(iOS) || os(visionOS)
         if let image = renderer.uiImage { return NSItemProvider(object: image) }
@@ -136,15 +149,20 @@ struct StickerCard: View {
         return NSItemProvider(object: sticker.text as NSString)
     }
 
-    /// 원본 사진에서 이 카드 자리 전체를 잘라 낸 조각
+    /// 끌어다 놓는 손글씨 크기: 사진 너비 372 기준 × 6 (예전 × 2 는 너무 작았어요), 폭은 600pt 까지 (#143)
+    private var inkScale: CGFloat { min(6, 600 / max(sticker.w, 1)) }
+
+    /// 끌어다 놓는 손글씨 조각. 서버 손글씨(투명 PNG)는 붙여넣기 색으로 칠해요.
+    /// 원본 사진 조각은 사진이라 색을 바꾸지 않아요.
     @ViewBuilder
-    private var inkPiece: some View {
+    private func inkPiece(_ color: Color) -> some View {
         if let ink {
-            inkView(ink).frame(width: sticker.w * 2, height: sticker.h * 2)
+            Image(uiImage: ink).renderingMode(.template).resizable().scaledToFit().foregroundStyle(color)
+                .frame(width: sticker.w * inkScale, height: sticker.h * inkScale)
         } else if let ink = sticker.inkImage {
             Image(ink)
         } else {
-            InkCrop(sticker: sticker, width: sticker.w * 2, height: sticker.h * 2)
+            InkCrop(sticker: sticker, width: sticker.w * inkScale, height: sticker.h * inkScale)
         }
     }
 
