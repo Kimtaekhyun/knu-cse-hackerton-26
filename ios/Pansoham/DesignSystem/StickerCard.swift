@@ -61,11 +61,9 @@ struct StickerCard: View {
                 } else if handwriting {
                     InkCrop(sticker: sticker, width: width - 40, height: 64)
                 } else {
-                    Text(sticker.text)
-                        .font(.system(size: 20, weight: .medium))
-                        .tracking(-0.2)
-                        .lineSpacing(20 * 1.45 - 24)
-                        .foregroundStyle(.black)
+                    // $...$ 구간은 수식으로 그려요 (#113)
+                    MathText(text: sticker.text, size: 20, weight: .medium, lineGap: 20 * 1.45 - 24,
+                             math: sticker.cardType != "code")
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -119,11 +117,15 @@ struct StickerCard: View {
         }
     }
 
-    /// 끌어다 놓을 때 건네는 내용. 텍스트 보기면 글자, 손글씨 보기면 사진 조각.
+    /// 끌어다 놓을 때 건네는 내용. 텍스트 보기면 글자(수식이 있으면 그린 그림), 손글씨 보기면 사진 조각.
     private func dragItem() -> NSItemProvider {
         // 굿노트로 옮긴 카드는 "옮김" 표시 (#99)
         CardAPI.markMovedQuietly([sticker])
-        guard handwriting else { return NSItemProvider(object: sticker.text as NSString) }
+        guard handwriting else {
+            // 굿노트는 LaTeX를 그리지 못해서, 수식이 있는 카드는 화면에 보이는 모양을 그림으로 넘겨요 (#113)
+            if sticker.hasMath, let image = MathText.image([sticker], width: width - 40) { return NSItemProvider(object: image) }
+            return NSItemProvider(object: sticker.text as NSString)
+        }
         let renderer = ImageRenderer(content: inkPiece)
         renderer.scale = 3
         #if os(iOS) || os(visionOS)
