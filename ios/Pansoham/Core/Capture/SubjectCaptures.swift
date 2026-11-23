@@ -266,12 +266,12 @@ extension SubjectCaptures.Item {
         return "카드 \(capture.cardCount)개 · \(head)" + (titles.count > 2 ? " 외 \(titles.count - 2)개" : "")
     }
 
-    /// 아직 옮기지 않은 판서 설명: 오늘이면 "카드 N개 · 굿노트로 옮기지 않았어요", 아니면 "N일째 그대로예요"
+    /// 아직 옮기지 않은 판서 설명: 오늘이면 "카드 N개 · 필기 앱으로 옮기지 않았어요", 아니면 "N일째 그대로예요"
     var unmovedSummary: String {
         let count = capture.unmovedCount
         let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: capture.takenDate ?? .now),
                                                    to: Calendar.current.startOfDay(for: .now)).day ?? 0
-        return days <= 0 ? "카드 \(count)개 · 굿노트로 옮기지 않았어요" : "카드 \(count)개 · \(days)일째 그대로예요"
+        return days <= 0 ? "카드 \(count)개 · 필기 앱으로 옮기지 않았어요" : "카드 \(count)개 · \(days)일째 그대로예요"
     }
 
     /// "자료구조 · 오늘 10:42" / "컴퓨터구조 · 11월 11일"

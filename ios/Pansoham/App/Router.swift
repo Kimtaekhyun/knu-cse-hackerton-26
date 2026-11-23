@@ -11,7 +11,7 @@ enum Screen: String, Hashable, CaseIterable {
     case onboarding, login, timetableUpload, timetableConfirm
     case homeFirst, home
     case capture, processing, captureError
-    case result, copied, splitView, cardDetail
+    case result, copied, cardDetail
     case subjectLessons, subjectCards, subjectEmpty
     case unsorted, unsortedMove
     case allSemesters, pastSemester, account

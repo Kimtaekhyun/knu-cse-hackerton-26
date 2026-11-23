@@ -268,10 +268,10 @@ private struct MoveIllustration: View {
             .frame(width: 250, height: 260, alignment: .topLeading)
             .place(x: 48, y: 40)
  
-            // 오른쪽: 굿노트
+            // 오른쪽: 필기 앱
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white)
-                miniTitle("굿노트").place(x: 18, y: 16)
+                miniTitle("필기 앱").place(x: 18, y: 16)
                 ForEach(0..<6, id: \.self) { i in
                     Rectangle()
                         .fill(Color.black.opacity(0.08))

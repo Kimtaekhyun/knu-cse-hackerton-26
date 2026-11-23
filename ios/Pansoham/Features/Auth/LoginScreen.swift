@@ -172,7 +172,7 @@ struct LoginScreen: View {
             }
             .at(x, y + 83)
 
-            Text("칠판·프로젝터 사진에서 필기만 카드로 뽑아\n굿노트로 바로 옮길 수 있어요.")
+            Text("칠판·프로젝터 사진에서 필기만 카드로 뽑아\n필기 앱으로 바로 옮길 수 있어요.")
                 .v2(18, .medium, .sub, tracking: -0.36)
                 .lineSpacing(7)
                 .enter(t, at: 0.8, dur: 0.5, dy: 12, ease: .out)
@@ -410,7 +410,7 @@ extension LoginScreen {
                     Text("노트에 놓으세요.").v2(34, .bold, .ink, tracking: -1.02)
                         .enter(t, at: 0.47, dy: 24)
                     Color.clear.frame(height: 16)
-                    Text("칠판·프로젝터 사진에서 필기만 카드로 뽑아 굿노트로 바로 옮길 수 있어요.")
+                    Text("칠판·프로젝터 사진에서 필기만 카드로 뽑아 필기 앱으로 바로 옮길 수 있어요.")
                         .font(.system(size: 16, weight: .medium))
                         .tracking(-0.32)
                         .foregroundStyle(Color.sub)

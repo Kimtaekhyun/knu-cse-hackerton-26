@@ -72,7 +72,6 @@ struct ContentView: View {
         case .processing: ProcessingScreen()
         case .captureError: CaptureErrorScreen()
         case .result, .copied: ResultScreen()
-        case .splitView: SplitViewScreen()
         case .cardDetail: CardDetailScreen()
         case .subjectLessons: SubjectLessonsScreen()
         case .subjectCards: SubjectCardsScreen()
