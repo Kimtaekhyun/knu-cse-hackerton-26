@@ -80,12 +80,12 @@ extension MathText {
     /// 굿노트는 LaTeX를 그리지 못해서, 끌어다 놓기 · 복사할 때 이 그림을 넘겨요. 실패하면 nil.
     /// 코드 카드는 그림 안에서도 글자 그대로 (들여쓰기 유지).
     @MainActor
-    static func image(_ cards: [Sticker], width: CGFloat, size: CGFloat = 20) -> UIImage? {
+    static func image(_ cards: [Sticker], width: CGFloat, size: CGFloat = 20, color: Color = .black) -> UIImage? {
         let lineGap = size * 1.45 - 24
         let renderer = ImageRenderer(content:
             VStack(alignment: .leading, spacing: size * 1.45 + lineGap) {
                 ForEach(Array(cards.enumerated()), id: \.offset) { _, card in
-                    MathText(text: card.text, size: size, weight: .medium, lineGap: lineGap,
+                    MathText(text: card.text, size: size, weight: .medium, color: color, lineGap: lineGap,
                              math: card.cardType != "code")
                 }
             }

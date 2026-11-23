@@ -269,7 +269,11 @@ struct ResultScreen: View {
     private var wide: some View {
         DesignCanvas {
             NavBar(backTitle: backTitle, title: "", onBack: { goBack() }) {
-                originalButton
+                // 붙여넣기 색 (#143)
+                HStack(spacing: 24) {
+                    PasteColorPicker()
+                    originalButton
+                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -347,6 +351,7 @@ struct ResultScreen: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
+                PasteColorPicker(compact: true).padding(.trailing, 12)
                 originalButton
             }
             .padding(.leading, 12)
