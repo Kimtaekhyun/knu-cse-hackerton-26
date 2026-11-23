@@ -48,6 +48,9 @@ struct HomeScreen: View {
                 guard AuthSession.shared.isLoggedIn else { return }
                 async let unsorted: Void = SubjectCaptures.unsorted.load(.unsorted)
                 async let unmoved: Void = SubjectCaptures.unmoved.load(.unmoved)
+                // 시험 복습 D-7 · D-1 알림 (#125)
+                LocalNotifications.shared.scheduleExam(HomeStore.shared.home?.exam,
+                                                       captures: SemesterStore.shared.subjects.map(\.captureCount).reduce(0, +))
                 _ = await (unsorted, unmoved)
             }
             .overlay {

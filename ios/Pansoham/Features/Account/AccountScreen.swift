@@ -13,6 +13,8 @@ struct AccountScreen: View {
     @State private var examAlert = true
     @State private var pendingAlert = true
     @State private var settingsError: String?
+    /// 알림 권한을 거절한 채 스위치를 켰을 때 (#125)
+    @State private var notifyDenied = false
     @AppStorage("profileName") private var name = "김마린"
     @AppStorage("profileSchool") private var school = "경북대학교"
     @State private var editingProfile = false
@@ -59,7 +61,17 @@ struct AccountScreen: View {
                 if let settings = me.settings {
                     examAlert = settings.notifyExam
                     pendingAlert = settings.notifyUnmoved
+                    LocalNotifications.shared.apply(cleanup: settings.notifyUnmoved, exam: settings.notifyExam)
                 }
+            }
+            .alert("알림이 꺼져 있어요", isPresented: $notifyDenied) {
+                Button("취소", role: .cancel) {}
+                Button("설정 열기") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                }
+                .keyboardShortcut(.defaultAction)
+            } message: {
+                Text("설정에서 판서함 알림을 켜 주세요.")
             }
             .alert("알림 설정을 저장하지 못했어요", isPresented: Binding(get: { settingsError != nil }, set: { if !$0 { settingsError = nil } })) {
                 Button("확인", role: .cancel) {}
@@ -103,10 +115,20 @@ struct AccountScreen: View {
     private func saveSettings(exam: Bool? = nil, unmoved: Bool? = nil) {
         guard isLive else { return }
         Task {
+            // 켤 때 알림 권한을 거절해 둔 상태면 설정 앱 안내 (#125)
+            if exam == true || unmoved == true, await LocalNotifications.shared.isDenied() { notifyDenied = true }
             do {
                 let saved = try await AuthAPI.updateSettings(notifyUnmoved: unmoved, notifyExam: exam)
                 examAlert = saved.notifyExam
                 pendingAlert = saved.notifyUnmoved
+                let notifications = LocalNotifications.shared
+                notifications.apply(cleanup: saved.notifyUnmoved, exam: saved.notifyExam)
+                // 다시 켰으면 지금 데이터로 다시 예약
+                if exam == true {
+                    notifications.scheduleExam(HomeStore.shared.home?.exam,
+                                               captures: SemesterStore.shared.subjects.map(\.captureCount).reduce(0, +))
+                }
+                if unmoved == true { notifications.unsortedChanged(count: SubjectCaptures.unsorted.items.count) }
             } catch {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     if let exam { examAlert = !exam }
@@ -209,7 +231,7 @@ struct AccountScreen: View {
             group("알림", width) {
                 toggleRow("시험 기간 알림", isOn: $examAlert) { saveSettings(exam: $0) }
                 divider
-                toggleRow("옮기지 않은 판서 알림", isOn: $pendingAlert) { saveSettings(unmoved: $0) }
+                toggleRow("정리 알림", isOn: $pendingAlert) { saveSettings(unmoved: $0) }
             }
             group("계정", width) {
                 row("로그아웃") { confirmingLogout = true }

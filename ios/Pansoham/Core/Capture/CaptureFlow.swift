@@ -74,6 +74,11 @@ final class CaptureFlow {
     /// 새로 찍은(고른) 사진들로 시작
     func begin(_ photos: [UIImage], takenAt: Date = .now) {
         jobs = photos.map { Job(id: UUID(), image: $0, takenAt: takenAt) }
+        // 수업 중에 찍었으면 수업 끝 + 5분 정리 알림 (#125)
+        if isLive {
+            let count = photos.count
+            Task { @MainActor in LocalNotifications.shared.noteCaptured(count: count, at: takenAt) }
+        }
         results = []
         failed = nil
         openedFolder = nil
