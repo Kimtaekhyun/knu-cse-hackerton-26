@@ -76,13 +76,15 @@ def test_list_is_newest_first_with_counts(client, auth, db, user):
     subject = make_subject(db, current)
     make_subject(db, current, name="운영체제")
     make_capture(db, user, current, subject)
-    make_capture(db, user, current)  # 미분류도 학기 판서 수에 들어간다
+    make_capture(db, user, current)  # 미분류는 학기 판서 수에서 뺀다 (#171)
+    make_capture(db, user, past)  # 과목 없는 학기의 미분류도 0
 
     body = client.get(URL, headers=auth).json()
     assert [s["id"] for s in body] == [str(current.id), str(past.id)]
     assert body[0]["subject_count"] == 2
-    assert body[0]["capture_count"] == 2
+    assert body[0]["capture_count"] == 1
     assert body[1]["subject_count"] == 0
+    assert body[1]["capture_count"] == 0
 
 
 # ---------- 현재 학기 ----------
