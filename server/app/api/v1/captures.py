@@ -109,9 +109,14 @@ def list_captures(
     unsorted: bool = False,
     unmoved: bool = False,
     before: datetime | None = None,
+    before_id: uuid.UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ):
-    """최신 판서부터. 과목 폴더(subject_id) · 미분류함(unsorted) · 옮기지 않은 판서(unmoved)"""
+    """최신 판서부터. 과목 폴더(subject_id) · 미분류함(unsorted) · 옮기지 않은 판서(unmoved)
+
+    다음 쪽은 받은 목록 마지막 판서의 taken_at을 before로, id를 before_id로 보낸다.
+    before_id만 보내면 400
+    """
     captures = service.list_captures(
         db,
         user,
@@ -119,6 +124,7 @@ def list_captures(
         unsorted=unsorted,
         unmoved=unmoved,
         before=before,
+        before_id=before_id,
         limit=limit,
     )
     return service.capture_outs(db, captures)

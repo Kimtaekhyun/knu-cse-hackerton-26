@@ -101,7 +101,7 @@ enum APIClient {
     static func raw(_ method: String, path: String, query: [URLQueryItem] = [],
                     timeout: TimeInterval = 30) async throws -> Data {
         var url = APIConfig.baseURL.appending(path: path)
-        if !query.isEmpty { url.append(queryItems: query) }
+        if !query.isEmpty { url = url.appendingQuery(query) }
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = method
         return try await data(for: request)
@@ -188,5 +188,19 @@ enum APIClient {
             let email: String?
         }
         let detail: Detail
+    }
+}
+
+private extension URL {
+    /// 쿼리를 붙여요. `URLQueryItem` 은 값 속 "+" 를 그대로 두는데, 서버는 "+" 를 공백으로 읽어서
+    /// 시각의 "+09:00" 같은 값이 깨져요. 그래서 "+" 만 "%2B" 로 바꿔 보내요.
+    func appendingQuery(_ items: [URLQueryItem]) -> URL {
+        guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false) else {
+            return appending(queryItems: items)
+        }
+        components.queryItems = (components.queryItems ?? []) + items
+        components.percentEncodedQuery = components.percentEncodedQuery?
+            .replacingOccurrences(of: "+", with: "%2B")
+        return components.url ?? appending(queryItems: items)
     }
 }

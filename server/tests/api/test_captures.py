@@ -262,6 +262,55 @@ def test_list_newest_first_with_filters(client, auth, db, user, semester, subjec
     assert (first["card_count"], first["unmoved_count"]) == (2, 1)
 
 
+def fetch_all(client, auth, limit, **params):
+    """앱처럼 마지막 판서의 (taken_at, id)를 커서로 짧은 쪽이 올 때까지 모두 불러온다"""
+    pages = []
+    cursor = {}
+    while True:
+        response = client.get(URL, headers=auth, params=params | cursor | {"limit": limit})
+        assert response.status_code == 200
+        page = response.json()
+        pages.append(page)
+        if len(page) < limit:
+            return pages
+        cursor = {"before": page[-1]["taken_at"], "before_id": page[-1]["id"]}
+
+
+def test_list_pages_return_every_capture_once(client, auth, db, user, semester, subject):
+    captures = [
+        make_capture(db, user, semester, subject, taken_at=IN_CLASS - timedelta(minutes=i))
+        for i in range(7)
+    ]
+    pages = fetch_all(client, auth, limit=3, subject_id=subject.id)
+    assert [len(page) for page in pages] == [3, 3, 1]
+    assert [item["id"] for page in pages for item in page] == [str(c.id) for c in captures]
+
+
+def test_list_pages_keep_captures_with_same_taken_at(client, auth, db, user, semester):
+    # 앨범에서 한 번에 올린 판서처럼 5장이 같은 시각. 쪽 경계(3장)에 걸쳐 있다
+    newest = make_capture(db, user, semester, taken_at=IN_CLASS + timedelta(hours=1))
+    same = [make_capture(db, user, semester, taken_at=IN_CLASS) for _ in range(5)]
+    oldest = make_capture(db, user, semester, taken_at=IN_CLASS - timedelta(hours=1))
+
+    pages = fetch_all(client, auth, limit=3)
+    got = [item["id"] for page in pages for item in page]
+    expected = [newest] + sorted(same, key=lambda c: c.id) + [oldest]
+    assert got == [str(c.id) for c in expected]
+
+
+def test_list_before_alone_still_works(client, auth, db, user, semester):
+    """before만 보내던 예전 방식: 그 시각보다 먼저 찍은 판서만 (같은 시각은 빠진다)"""
+    make_capture(db, user, semester, taken_at=IN_CLASS)
+    old = make_capture(db, user, semester, taken_at=IN_CLASS - timedelta(minutes=1))
+    response = client.get(URL, headers=auth, params={"before": IN_CLASS.isoformat()})
+    assert [item["id"] for item in response.json()] == [str(old.id)]
+
+
+def test_list_before_id_without_before_is_400(client, auth):
+    response = client.get(URL, headers=auth, params={"before_id": str(uuid.uuid4())})
+    assert response.status_code == 400
+
+
 def test_list_subject_and_unsorted_together_is_400(client, auth, subject):
     response = client.get(URL, headers=auth, params={"subject_id": subject.id, "unsorted": True})
     assert response.status_code == 400
