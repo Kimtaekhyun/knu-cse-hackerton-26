@@ -350,7 +350,7 @@ struct ProcessingScreen: View {
     /// 촬영 · 앨범에서 넘겨준 사진으로 시작해요. 오류 화면의 "다시 처리"는 `flow.jobs` 를 미리 채워 둬요.
     private func start() async {
         if !router.albumPhotos.isEmpty {
-            flow.begin(router.albumPhotos)
+            flow.begin(router.albumPhotos, subject: router.captureSubject)
             router.albumPhotos = []
         }
         if flow.isLive {
@@ -376,7 +376,8 @@ struct ProcessingScreen: View {
                     capture = saved
                 } else {
                     let job = flow.jobs[index]
-                    capture = try await CaptureAPI.upload(job.image, id: job.id, takenAt: job.takenAt)
+                    capture = try await CaptureAPI.upload(job.image, id: job.id, takenAt: job.takenAt,
+                                                          subjectId: flow.chosenSubject?.id)
                 }
                 try checkAlive(index)
                 flow.jobs[index].capture = capture

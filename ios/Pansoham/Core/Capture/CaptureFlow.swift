@@ -50,6 +50,8 @@ final class CaptureFlow {
     var failed: Job?
     /// 지금 찍으면 저장될 곳 ("자료구조 폴더" · "미분류함")
     var destination: CaptureDestination?
+    /// 과목 폴더에서 찍기 시작했으면 그 과목. 업로드에 subject_id 로 보내 시간표 분류보다 앞서요.
+    var chosenSubject: SemesterAPI.SubjectDTO?
     /// 이번에 복사 · 끌어다 놓기 한 카드 (결과 "다시 찍기"에서 남기기를 기본으로, #126)
     var movedCards: Set<UUID> = []
 
@@ -75,8 +77,10 @@ final class CaptureFlow {
     var isLive: Bool { AuthSession.shared.isLoggedIn }
 
     /// 새로 찍은(고른) 사진들로 시작
-    func begin(_ photos: [UIImage], takenAt: Date = .now) {
+    /// subject: 과목 폴더에서 찍었으면 그 과목 (nil 이면 시간표로 자동 분류)
+    func begin(_ photos: [UIImage], takenAt: Date = .now, subject: SemesterAPI.SubjectDTO? = nil) {
         jobs = photos.map { Job(id: UUID(), image: $0, takenAt: takenAt) }
+        chosenSubject = subject
         // 수업 중에 찍었으면 수업 끝 + 5분 정리 알림 (#125)
         if isLive {
             let count = photos.count
@@ -92,6 +96,7 @@ final class CaptureFlow {
         jobs = []
         results = saved
         failed = nil
+        chosenSubject = nil
         openedFolder = folder
     }
 
@@ -111,8 +116,9 @@ final class CaptureFlow {
     /// 판서가 저장된 곳 이름 ("자료구조 폴더" · "미분류함")
     func placeTitle(of capture: CaptureDTO?) -> String {
         if let openedFolder { return openedFolder == "미분류함" ? openedFolder : "\(openedFolder) 폴더" }
-        guard let capture else { return destination?.placeTitle ?? "미분류함" }
+        guard let capture else { return chosenSubject.map { "\($0.name) 폴더" } ?? destination?.placeTitle ?? "미분류함" }
         guard let subjectId = capture.subjectId else { return "미분류함" }
+        if let chosenSubject, chosenSubject.id == subjectId { return "\(chosenSubject.name) 폴더" }
         if let destination, destination.subjectId == subjectId { return destination.placeTitle }
         return "과목 폴더"
     }

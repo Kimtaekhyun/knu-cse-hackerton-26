@@ -42,10 +42,12 @@ struct CaptureScreen: View {
         .imagePicker(isPresented: $showAlbum) { process($0) }
     }
 
-    /// "자료구조 폴더에 저장" · "미분류함에 저장". 로그인 전에는 디자인 문구 그대로
+    /// "자료구조 폴더에 저장" · "미분류함에 저장". 로그인 전에는 디자인 문구 그대로.
+    /// 과목 폴더에서 열었으면 그 과목, 아니면 서버가 시간표로 정한 곳.
     private var placeText: String {
         let flow = CaptureFlow.shared
         guard flow.isLive else { return "자료구조 폴더에 저장" }
+        if let subject = router.captureSubject { return "\(subject.name) 폴더에 저장" }
         return "\(flow.destination?.placeTitle ?? "미분류함")에 저장"
     }
 

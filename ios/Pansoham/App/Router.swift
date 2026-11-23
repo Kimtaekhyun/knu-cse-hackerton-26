@@ -80,6 +80,18 @@ final class Router {
 
     var current: Screen { stack.last ?? .onboarding }
 
+    /// 과목 폴더에서 촬영 화면을 열었으면 그 과목. 찍은 판서를 시간표와 상관없이 이 과목에 넣어요.
+    /// 촬영 화면 아래 화면을 보고 정해요 (결과 · 카드 상세처럼 판서 흐름 화면은 건너뛰어요).
+    /// 홈 · 미분류함에서 열었거나 촬영 화면을 거치지 않으면(홈 앨범) nil → 서버가 시간표로 분류해요.
+    var captureSubject: SemesterAPI.SubjectDTO? {
+        guard let at = stack.lastIndex(of: .capture) else { return nil }
+        let flowScreens: Set<Screen> = [.capture, .processing, .captureError, .result, .copied, .splitView, .cardDetail]
+        let origin = stack[..<at].last { !flowScreens.contains($0) }
+        let subjectScreens: Set<Screen> = [.subjectLessons, .subjectCards, .subjectEmpty]
+        guard let origin, subjectScreens.contains(origin) else { return nil }
+        return subject
+    }
+
     func push(_ screen: Screen) {
         direction = screen == .capture ? .zoomIn : .forward
         stack.append(screen)
