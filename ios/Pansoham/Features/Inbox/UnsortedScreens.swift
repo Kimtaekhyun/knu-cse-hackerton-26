@@ -287,7 +287,7 @@ struct UnsortedScreen: View {
                             let on = target == subject
                             Button { target = subject } label: {
                                 HStack {
-                                    Text(subject).ds(17, on ? .bold : .medium).lineLimit(1)
+                                    Text(subject).dsLine(17, on ? .bold : .medium)
                                     Spacer()
                                     Image(on ? "radio-on-24" : "radio-off-24")
                                 }
@@ -313,10 +313,25 @@ struct UnsortedScreen: View {
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                PrimaryButton(title: movingNow ? "옮기는 중…" : "\(target)(으)로 옮기기", width: 294,
-                              enabled: !movingNow && subjects.contains(target)) {
-                    move(item)
+                // 과목 이름만 … 로 줄이고 "(으)로 옮기기" 는 항상 보이게 (#158)
+                let enabled = !movingNow && subjects.contains(target)
+                Button { move(item) } label: {
+                    HStack(spacing: 0) {
+                        if movingNow {
+                            Text("옮기는 중…").ds(17, .bold, .white)
+                        } else {
+                            Text(target).dsLine(17, .bold, .white)
+                            Text("(으)로 옮기기").ds(17, .bold, .white)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(width: 294, height: 56)
+                    .background(Color.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .opacity(enabled ? 1 : 0.15)
                 }
+                .buttonStyle(.plain)
+                .disabled(!enabled)
             }
         }
         .padding(.top, 28)

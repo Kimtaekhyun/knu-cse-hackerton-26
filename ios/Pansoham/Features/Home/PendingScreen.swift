@@ -129,8 +129,8 @@ struct PendingScreen: View {
             HStack(spacing: 16) {
                 note.thumb(width: 104, height: 80, scale: 1.6667, radius: 12)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(note.title).ds(17, .bold)
-                    Text(note.detail).ds(15, .regular, .dsSub)
+                    Text(note.title).dsLine(17, .bold)
+                    Text(note.detail).dsLine(15, .regular, .dsSub)
                 }
                 Spacer(minLength: 0)
                 Image("chevron-right-20")

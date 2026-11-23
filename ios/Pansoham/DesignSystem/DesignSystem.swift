@@ -35,6 +35,17 @@ extension Text {
             .lineSpacing(line.map { max(0, size * $0 - size * 1.2) } ?? 0)
             .fixedSize()
     }
+
+    /// 과목 이름 길이가 길 때 줄임말 처리 (...)
+    func dsLine(_ size: CGFloat,
+                _ weight: Font.Weight = .regular,
+                _ color: Color = .black) -> some View {
+        self.font(.system(size: size, weight: weight))
+            .tracking(-size * (size >= 34 ? 0.025 : 0.01))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
 }
 
 // MARK: - 기준 캔버스
@@ -84,7 +95,8 @@ struct PrimaryButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title).ds(17, .bold, .white)
+            Text(title).dsLine(17, .bold, .white)
+                .padding(.horizontal, 16)
                 .frame(width: width, height: 56)
                 .background(Color.black)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -131,7 +143,7 @@ struct NavBar<Trailing: View>: View {
                 Button(action: onBack) {
                     HStack(spacing: 2) {
                         Image("chevron-back-24")
-                        Text(backTitle).ds(17, .medium)
+                        Text(backTitle).dsLine(17, .medium).frame(maxWidth: 320, alignment: .leading)
                     }
                     .contentShape(Rectangle())
                 }
@@ -155,7 +167,7 @@ extension NavBar where Trailing == EmptyView {
 
 // MARK: - 아래 막대 (왼쪽 설명 · 오른쪽 버튼)
 
-/// 아래 막대. `accessory` 는 설명 글자 바로 옆에 붙는 버튼 자리 (없으면 비워요).
+/// 아래 막대. `accessory` 는 설명 글자 바로 옆에 붙는 버튼 자리, 없으면 비움
 struct BottomBar<Trailing: View, Accessory: View>: View {
     let caption: String
     var accessory: Accessory
@@ -198,7 +210,7 @@ struct SubjectCard: View {
     let detail: String
     let count: Int
     var style: Style = .gray
-    /// 236(메인) 또는 260(학기 화면). 폴더 그림이 너비마다 따로 있어요.
+    /// 236(메인) 또는 260(학기 화면). 폴더 그림이 너비마다 따로 있음
     var width: CGFloat = 236
     /// 숫자 대신 보여 줄 글자 (예: "+")
     var symbol: String? = nil
@@ -227,8 +239,8 @@ struct SubjectCard: View {
                 }
                 Spacer(minLength: 0)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(name).ds(17, .bold)
-                    Text(detail).ds(13, .regular, .dsSub)
+                    Text(name).dsLine(17, .bold)
+                    Text(detail).dsLine(13, .regular, .dsSub)
                 }
             }
             .padding(.top, 34)
@@ -246,7 +258,7 @@ struct SubjectCard: View {
 
 // MARK: - 판서 사진 잘라 보여 주기
 
-/// 피그마처럼 사진 한 장의 일부만 잘라 보여 줘요.
+/// 피그마처럼 사진 한 장의 일부만 잘라 보여줌
 /// `scale` 은 틀 대비 사진 크기, `x`·`y` 는 틀 대비 이동 비율.
 struct BoardPhoto: View {
     var name = "board-photo"

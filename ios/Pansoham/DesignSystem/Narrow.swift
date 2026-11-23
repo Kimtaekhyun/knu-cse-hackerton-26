@@ -78,7 +78,7 @@ struct NarrowPage<Trailing: View, Content: View, Bottom: View>: View {
                         Button(action: onBack) {
                             HStack(spacing: 2) {
                                 Image("chevron-back-24")
-                                Text(backTitle).ds(17, .medium)
+                                Text(backTitle).dsLine(17, .medium).frame(maxWidth: 180, alignment: .leading)
                             }
                             .contentShape(Rectangle())
                         }
