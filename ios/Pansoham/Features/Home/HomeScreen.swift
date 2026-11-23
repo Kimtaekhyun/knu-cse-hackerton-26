@@ -147,7 +147,7 @@ struct HomeScreen: View {
         VStack(alignment: .leading, spacing: 32) {
             nowCard(t)
             todayList()
-            if !firstScreen && !PendingNote.current.isEmpty { pendingPanel() }
+            if !firstScreen { pendingPanel() }
         }
     }
 
@@ -251,13 +251,14 @@ struct HomeScreen: View {
         .frame(width: width)
     }
 
-    /// 아직 옮기지 않은 판서 (08 에만 있어요)
+    /// 아직 옮기지 않은 판서 (08 에만 있어요). 0장이어도 틀과 개수(0)는 남겨요 (#124).
     private func pendingPanel(_ width: CGFloat = 340) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let notes = PendingNote.current
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 HStack(spacing: 8) {
                     Text("아직 옮기지 않은 판서").ds(16, .bold)
-                    Text("\(PendingNote.current.count)").ds(12, .bold, .white)
+                    Text("\(notes.count)").ds(12, .bold, .white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
                         .background(Color.dsBlue)
@@ -271,7 +272,7 @@ struct HomeScreen: View {
                 }
                 .buttonStyle(.plain)
             }
-            ForEach(Array(PendingNote.current.prefix(2).enumerated()), id: \.element.id) { index, note in
+            ForEach(Array(notes.prefix(2).enumerated()), id: \.element.id) { index, note in
                 pendingRow(note)
                     .entrance(shown, delay: 0.5 + 0.12 * Double(index), duration: 0.35, y: 12)
             }
@@ -474,7 +475,7 @@ extension HomeScreen {
                 VStack(alignment: .leading, spacing: 28) {
                     nowCard(t, width: inner)
                     todayList(inner)
-                    if !firstScreen && !PendingNote.current.isEmpty { pendingPanel(inner) }
+                    if !firstScreen { pendingPanel(inner) }
 
                     // 과목 폴더
                     VStack(alignment: .leading, spacing: 14) {
