@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import HTTPException
-from sqlalchemy import exists, func, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Capture, CaptureStatus, Card, Semester, User
@@ -188,6 +188,7 @@ def list_captures(
     unsorted: bool,
     unmoved: bool,
     before: datetime | None,
+    before_id: uuid.UUID | None,
     limit: int,
 ) -> list[Capture]:
     """최신 판서부터. 조건은
@@ -197,9 +198,16 @@ def list_captures(
     - unsorted: 미분류함 (처리 상태와 관계없이 과목이 없는 판서)
     - unmoved: 아직 옮기지 않은 카드가 하나라도 남은 판서
     - before: 이 시각보다 먼저 찍은 판서 (다음 쪽 불러오기: 받은 목록의 마지막 taken_at)
+    - before_id: before와 함께 받은 목록의 마지막 id를 보내면, before와 같은 시각에 찍은
+      판서 중 그 id 뒤의 판서도 이어서 준다. 정렬이 (taken_at 내림차순, id 오름차순)이라
+      커서도 두 값이어야 쪽 경계에 걸린 같은 시각 판서가 빠지지 않는다
+      (앨범에서 여러 장을 한 번에 올리면 촬영 시각이 모두 같다).
+      before 없이 before_id만 보내면 기준 시각을 알 수 없어 400
     """
     if subject_id is not None and unsorted:
         raise HTTPException(400, "subject_id와 unsorted는 함께 쓸 수 없어요.")
+    if before_id is not None and before is None:
+        raise HTTPException(400, "before_id는 before와 함께 보내야 해요.")
     query = select(Capture).where(Capture.user_id == user.id)
     if subject_id is not None:
         query = query.where(Capture.subject_id == subject_id)
@@ -207,7 +215,15 @@ def list_captures(
         query = query.where(Capture.subject_id.is_(None))
     if unmoved:
         query = query.where(exists().where(Card.capture_id == Capture.id, Card.is_moved.is_(False)))
-    if before is not None:
+    if before is not None and before_id is not None:
+        cursor = to_seoul(before)
+        query = query.where(
+            or_(
+                Capture.taken_at < cursor,
+                and_(Capture.taken_at == cursor, Capture.id > before_id),
+            )
+        )
+    elif before is not None:
         query = query.where(Capture.taken_at < to_seoul(before))
     # 같은 시각에 찍은 판서끼리도 순서가 매번 같게 id로 한 번 더 정렬한다
     query = query.order_by(Capture.taken_at.desc(), Capture.id).limit(limit)

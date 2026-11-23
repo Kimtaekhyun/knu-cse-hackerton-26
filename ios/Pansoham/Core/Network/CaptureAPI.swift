@@ -143,16 +143,31 @@ enum CaptureAPI {
         try await APIClient.json("GET", path: "api/v1/captures/\(id.uuidString)", as: CaptureDTO.self)
     }
 
+    /// 목록 한 번에 받는 장 수 (서버 최대 200)
+    static let pageSize = 200
+
     /// 목록 (최신부터). 미분류함은 `unsorted: true`, 과목 폴더는 `subjectId`,
     /// 아직 옮기지 않은 카드가 남은 판서는 `unmoved: true`
+    ///
+    /// 서버는 한 번에 `pageSize` 장까지만 주므로, 받은 쪽이 꽉 차 있으면 마지막 판서의
+    /// (taken_at, id)를 커서로 다음 쪽을 이어 받아 전부 모아요 (#152).
+    /// taken_at 은 서버가 준 문자열을 그대로 돌려보내요 (Date 로 바꾸면 마이크로초가 깎여 커서가 어긋나요).
     static func list(subjectId: UUID? = nil, unsorted: Bool = false, unmoved: Bool = false) async throws -> [CaptureDTO] {
-        var query: [URLQueryItem] = []
-        if unmoved { query.append(URLQueryItem(name: "unmoved", value: "true")) }
-        if let subjectId { query.append(URLQueryItem(name: "subject_id", value: subjectId.uuidString)) }
-        if unsorted { query.append(URLQueryItem(name: "unsorted", value: "true")) }
-        let data = try await APIClient.raw("GET", path: "api/v1/captures", query: query)
-        guard let list = try? JSONDecoder().decode([CaptureDTO].self, from: data) else { throw APIError.invalidResponse }
-        return list
+        var filter: [URLQueryItem] = [URLQueryItem(name: "limit", value: String(pageSize))]
+        if unmoved { filter.append(URLQueryItem(name: "unmoved", value: "true")) }
+        if let subjectId { filter.append(URLQueryItem(name: "subject_id", value: subjectId.uuidString)) }
+        if unsorted { filter.append(URLQueryItem(name: "unsorted", value: "true")) }
+
+        var all: [CaptureDTO] = []
+        var cursor: [URLQueryItem] = []
+        while true {
+            let data = try await APIClient.raw("GET", path: "api/v1/captures", query: filter + cursor)
+            guard let page = try? JSONDecoder().decode([CaptureDTO].self, from: data) else { throw APIError.invalidResponse }
+            all += page
+            guard page.count >= pageSize, let last = page.last else { return all }
+            cursor = [URLQueryItem(name: "before", value: last.takenAt),
+                      URLQueryItem(name: "before_id", value: last.id.uuidString)]
+        }
     }
 
     /// 실패한 판서 다시 처리. `skipRectify` 면 화면을 못 찾아도 사진 그대로 써요 (11 "그대로 쓰기").
