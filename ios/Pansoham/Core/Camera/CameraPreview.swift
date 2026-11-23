@@ -56,12 +56,9 @@ private struct PreviewLayerView: UIViewRepresentable {
     let onTap: (CGPoint, CGPoint) -> Void
 
     func makeUIView(context: Context) -> PreviewUIView {
-        let view = PreviewUIView()
-        view.previewLayer.session = engine.session
-        // 찍히는 범위를 그대로 보여 주려고 잘라 내지 않고 비율대로 (남는 곳은 검은 여백)
-        view.previewLayer.videoGravity = .resizeAspect
+        // 미리보기 레이어는 카메라가 한 장만 갖고 있어요. 뷰가 새로 만들어지면(화면 크기 변경) 여기로 옮겨 붙여요
+        let view = PreviewUIView(previewLayer: engine.previewLayer)
         view.backgroundColor = .clear
-        engine.attach(view.previewLayer)
 
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
         view.addGestureRecognizer(tap)
@@ -86,7 +83,24 @@ private struct PreviewLayerView: UIViewRepresentable {
     }
 
     final class PreviewUIView: UIView {
-        override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
-        var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+        let previewLayer: AVCaptureVideoPreviewLayer
+
+        init(previewLayer: AVCaptureVideoPreviewLayer) {
+            self.previewLayer = previewLayer
+            super.init(frame: .zero)
+            layer.addSublayer(previewLayer)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            // 다른 뷰로 옮겨 갔다가 돌아왔으면 다시 붙여요
+            if previewLayer.superlayer !== layer { layer.addSublayer(previewLayer) }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            previewLayer.frame = bounds
+            CATransaction.commit()
+        }
     }
 }
