@@ -100,7 +100,7 @@ struct AccountScreen: View {
                 Button("취소", role: .cancel) {}
                 Button("로그아웃", role: .destructive) { logout() }
             } message: {
-                Text("다시 카카오로 로그인하면 시간표와 판서를 그대로 볼 수 있어요.")
+                Text("다시 로그인하면 시간표와 판서를 그대로 볼 수 있어요.")
             }
             .alert("계정을 삭제할까요?", isPresented: $confirmingDelete) {
                 Button("취소", role: .cancel) {}
@@ -196,7 +196,7 @@ struct AccountScreen: View {
         }
     }
 
-    /// 저장된 로그인 토큰과 카카오 로그인을 지우고 로그인 화면으로
+    /// 저장된 로그인 토큰(카카오면 카카오 로그인도)을 지우고 로그인 화면으로
     private func logout() {
         AuthSession.shared.logout()
         router.reset(to: .login, direction: .fade)
