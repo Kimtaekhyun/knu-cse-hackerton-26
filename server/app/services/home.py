@@ -1,7 +1,7 @@
 """메인 화면(07 · 08) 값 모으기.
 
 라우터(app/api/v1/home.py)는 기준 시각만 정하고 계산은 여기서 한다.
-집계 질의는 queries, 시험 기간 규칙은 exam_schedule에 있다.
+집계 질의는 queries, 시험 기간 규칙은 exam_schedule, 학사일정 찾기는 academic_calendar에 있다.
 """
 
 from datetime import datetime, timedelta
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models import SubjectSlot, User
 from app.schemas.home import HomeClass, HomeExam, HomeOut, HomeWeek
-from app.services import exam_schedule, queries
+from app.services import academic_calendar, exam_schedule, queries
 from app.services.queries import SEOUL
 
 
@@ -42,7 +42,8 @@ def home(db: Session, user: User, at: datetime) -> HomeOut:
     last_week = queries.weekly_capture_counts(db, user.id, monday - timedelta(days=7))
     days = [this_week[monday + timedelta(days=i)] for i in range(7)]
 
-    exam = exam_schedule.next_exam(queries.current_calendar(db, user.id), today)
+    # 학사일정이 없으면 뒤에서 찾게 하고 추정 개강일로 계산한다 (#173)
+    exam = exam_schedule.next_exam(academic_calendar.calendar_for(db, user), today)
 
     return HomeOut(
         now_class=now_class,

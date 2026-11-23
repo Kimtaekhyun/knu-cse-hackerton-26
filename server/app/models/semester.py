@@ -59,3 +59,24 @@ class AcademicCalendar(Base):
     starts_on: Mapped[date]
     midterm_start: Mapped[date | None]
     final_start: Mapped[date | None]
+
+
+class CalendarSearch(Base):
+    """학사일정 웹 검색 기록 (#173). 서버를 다시 켜도 유지되도록 DB에 둔다
+
+    - 같은 학교 · 학기는 마지막 검색 뒤 하루 동안 다시 찾지 않는다
+    - 모든 학교를 합쳐 하루 검색 수를 제한한다
+      (학교 이름을 바꿔 가며 저장해도 요금이 한도를 넘지 않게)
+    """
+
+    __tablename__ = "calendar_searches"
+    __table_args__ = (
+        Index("ix_calendar_searches_key", "school", "year", "term", "searched_at"),
+        Index("ix_calendar_searches_searched_at", "searched_at"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    school: Mapped[str]
+    year: Mapped[int]
+    term: Mapped[SemesterTerm] = mapped_column(semester_term)
+    searched_at: Mapped[datetime] = created_at()

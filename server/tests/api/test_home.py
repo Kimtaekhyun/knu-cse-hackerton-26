@@ -3,7 +3,7 @@
 날짜 기준: 2026-11-23은 월요일, 2026-11-24는 화요일(weekday 1).
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -197,21 +197,75 @@ def test_no_exam_after_final(client, auth, timetable):
     assert get_home(client, auth, "2026-12-21T00:00:00+09:00")["exam"] is None
 
 
-def test_no_exam_without_school(client, db):
+def test_seeded_calendar_is_not_searched(client, auth, timetable, calendar_lookups):
+    get_home(client, auth, "2026-11-22T12:00:00+09:00")
+    assert calendar_lookups == []
+
+
+# 학사일정이 없으면 추정 개강일(2026-09-01 화) 기준 8 · 15주차: 중간 10/20, 기말 12/8 (#173)
+ESTIMATED_FINAL = {
+    "kind": "final",
+    "starts_on": "2026-12-08",
+    "ends_on": "2026-12-14",
+    "days_left": 16,
+    "in_progress": False,
+}
+
+
+def test_estimated_exam_without_school(client, db, calendar_lookups):
     user = make_user(db)  # 학교 없음
     make_semester(db, user)
-    assert get_home(client, bearer(user.id), "2026-11-22T12:00:00+09:00")["exam"] is None
+    exam = get_home(client, bearer(user.id), "2026-11-22T12:00:00+09:00")["exam"]
+    assert exam == ESTIMATED_FINAL
+    assert calendar_lookups == []  # 학교를 모르면 찾지 않음
 
 
-def test_no_exam_for_school_without_calendar(client, db):
+def test_school_without_calendar_is_searched_and_estimated(client, db, calendar_lookups):
     user = make_user(db, school="없는대학교")
     make_semester(db, user)
-    assert get_home(client, bearer(user.id), "2026-11-22T12:00:00+09:00")["exam"] is None
+    exam = get_home(client, bearer(user.id), "2026-11-22T12:00:00+09:00")["exam"]
+    assert exam == ESTIMATED_FINAL
+    assert calendar_lookups == [("없는대학교", 2026, SemesterTerm.second)]
 
 
-def test_no_exam_for_semester_without_calendar(client, db, auth, user):
+def test_semester_without_calendar_is_searched_and_estimated(
+    client, db, auth, user, calendar_lookups
+):
     make_semester(db, user, year=2027, term=SemesterTerm.first)  # 시드에 없는 학기
-    assert get_home(client, auth, "2027-04-01T12:00:00+09:00")["exam"] is None
+    exam = get_home(client, auth, "2027-04-01T12:00:00+09:00")["exam"]
+    # 2027-03-02(화) 개강 → 8주차 첫날 4/20
+    assert (exam["kind"], exam["starts_on"], exam["days_left"]) == ("midterm", "2027-04-20", 19)
+    assert calendar_lookups == [("경북대학교", 2027, SemesterTerm.first)]
+
+
+def test_start_only_calendar_uses_found_start(client, db, calendar_lookups):
+    # 검색으로 개강일(8/31 월)만 찾아 저장된 경우: 추정 9/1이 아니라 8/31 기준 15주차 → 기말 12/7
+    from app.services.academic_calendar import FoundDates, save
+
+    save(
+        db,
+        "부산대학교",
+        2026,
+        SemesterTerm.second,
+        FoundDates(
+            starts_on=date(2026, 8, 31), midterm_start=None, final_start=None, source_url=None
+        ),
+    )
+    user = make_user(db, school="부산대학교")
+    make_semester(db, user)
+    exam = get_home(client, bearer(user.id), "2026-11-22T12:00:00+09:00")["exam"]
+    assert (exam["kind"], exam["starts_on"], exam["ends_on"]) == (
+        "final",
+        "2026-12-07",
+        "2026-12-13",
+    )
+    # 시험 시작일이 비어 있으니 다시 찾게 한다
+    assert calendar_lookups == [("부산대학교", 2026, SemesterTerm.second)]
+
+
+def test_no_exam_in_summer_term(client, db, auth, user, calendar_lookups):
+    make_semester(db, user, year=2027, term=SemesterTerm.summer)
+    assert get_home(client, auth, "2027-07-10T12:00:00+09:00")["exam"] is None
 
 
 # ---------- 다른 사용자 · 인증 · 기본 시각 ----------

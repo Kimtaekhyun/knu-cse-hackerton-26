@@ -5,7 +5,13 @@ from datetime import date
 import pytest
 
 from app.models import AcademicCalendar, SemesterTerm
-from app.services.exam_schedule import Exam, exam_periods, next_exam
+from app.services.exam_schedule import (
+    Exam,
+    estimated_calendar,
+    estimated_start,
+    exam_periods,
+    next_exam,
+)
 
 
 def calendar(midterm=None, final=None) -> AcademicCalendar:
@@ -60,3 +66,34 @@ def test_next_exam(today, expected):
 
 def test_no_calendar_means_no_exam():
     assert next_exam(None, date(2026, 11, 22)) is None
+
+
+# ---------- 학사일정이 없을 때 추정 개강일 (#173) ----------
+
+
+@pytest.mark.parametrize(
+    ("year", "term", "expected"),
+    [
+        (2026, SemesterTerm.first, date(2026, 3, 2)),  # 월
+        (2026, SemesterTerm.second, date(2026, 9, 1)),  # 화
+        (2025, SemesterTerm.first, date(2025, 3, 3)),  # 3/2 일 → 월
+        (2024, SemesterTerm.second, date(2024, 9, 2)),  # 9/1 일 → 월
+        (2029, SemesterTerm.second, date(2029, 9, 3)),  # 9/1 토 → 월
+        (2026, SemesterTerm.summer, None),
+        (2026, SemesterTerm.winter, None),
+    ],
+)
+def test_estimated_start(year, term, expected):
+    assert estimated_start(year, term) == expected
+
+
+def test_estimated_calendar_uses_week_8_and_15():
+    estimated = estimated_calendar("부산대학교", 2026, SemesterTerm.second)
+    assert exam_periods(estimated) == [
+        ("midterm", date(2026, 10, 20), date(2026, 10, 26)),
+        ("final", date(2026, 12, 8), date(2026, 12, 14)),
+    ]
+
+
+def test_no_estimated_calendar_for_seasonal_term():
+    assert estimated_calendar("부산대학교", 2026, SemesterTerm.summer) is None

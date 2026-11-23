@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     claude_timetable_model: str = "claude-haiku-5-5"
     # Claude로 판서를 읽을 때 쓰는 모델
     claude_note_model: str = "claude-haiku-5-5"
+    # 학사일정을 웹 검색으로 찾을 때 쓰는 모델 (#173). 학교 · 학기마다 한 번만 찾는다
+    calendar_model: str = "claude-opus-5-5"
     gemini_api_key: str = ""
     # 판서 추출에 쓰는 기본 모델
     gemini_model: str = "gemini-3.5-flash-lite"
