@@ -22,6 +22,7 @@ struct AccountScreen: View {
     @State private var pickingSchool = false
     @State private var savingSchool = false
     @State private var schoolError: String?
+    @State private var nameError: String?
     @State private var confirmingDelete = false
     @State private var confirmingLogout = false
 
@@ -53,6 +54,8 @@ struct AccountScreen: View {
             .task {
                 guard isLive, let me = try? await AuthAPI.me() else { return }
                 liveSchool = me.school
+                // 기기에 둔 이름을 서버 이름으로 맞춰요 (#122)
+                name = me.name
                 if let settings = me.settings {
                     examAlert = settings.notifyExam
                     pendingAlert = settings.notifyUnmoved
@@ -62,6 +65,11 @@ struct AccountScreen: View {
                 Button("확인", role: .cancel) {}
             } message: {
                 Text(settingsError ?? "")
+            }
+            .alert("이름을 저장하지 못했어요", isPresented: Binding(get: { nameError != nil }, set: { if !$0 { nameError = nil } })) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(nameError ?? "")
             }
             .alert("학교를 저장하지 못했어요", isPresented: Binding(get: { schoolError != nil }, set: { if !$0 { schoolError = nil } })) {
                 Button("확인", role: .cancel) {}
@@ -73,7 +81,7 @@ struct AccountScreen: View {
                 Button("취소", role: .cancel) {}
                 Button("저장") {
                     let newName = draftName.trimmingCharacters(in: .whitespaces)
-                    if !newName.isEmpty { name = newName }
+                    if !newName.isEmpty, newName != name { saveName(newName) }
                 }
             }
             .alert("로그아웃할까요?", isPresented: $confirmingLogout) {
@@ -113,7 +121,19 @@ struct AccountScreen: View {
         withAnimation(.easeOut(duration: 0.2)) { pickingSchool = false }
     }
 
-    /// 학교 저장: 로그인했으면 `PATCH /me`, 아니면 기기에만
+    /// 이름 저장: 로그인했으면 `PATCH /me`, 아니면 기기에만. 실패하면 원래 이름 그대로 (#122)
+    private func saveName(_ value: String) {
+        guard isLive else { name = value; return }
+        Task {
+            do {
+                name = try await AuthAPI.updateName(value).name
+            } catch {
+                nameError = error.localizedDescription
+            }
+        }
+    }
+
+    /// 학교 저장: 로그인했으면 `PATCH /me`, 아니면 기기에만. 빈 글자면 학교 비우기
     private func saveSchool(_ value: String) {
         guard isLive else {
             school = value
