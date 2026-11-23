@@ -25,11 +25,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
-from app.models import Capture, CaptureStatus, Card
+from app.models import Capture, CaptureStatus, Card, CardType
 from app.services import image_limits
 from app.services.captures import capture_dir, card_crop_key, rectified_key
 from app.services.llm import LLMError
-from app.services.pipeline import vision
+from app.services.pipeline import latex, vision
 from app.services.pipeline.regions import NoteRegion, ask_regions, card_type_of
 from app.storage import local as storage
 
@@ -144,14 +144,18 @@ def build_cards(capture_id: uuid.UUID, image: np.ndarray, regions: list[NoteRegi
         card_id = uuid.uuid4()
         key = card_crop_key(capture_id, card_id)
         storage.save(key, vision.encode_png(vision.card_ink(image, mask, box)))
+        card_type = card_type_of(region)
         content = "\n".join(region.lines)
+        if card_type != CardType.code:
+            # 앱이 그릴 수 있는 LaTeX로 (코드 카드의 \ · $ 는 수식이 아니라 그대로)
+            content = latex.normalize(content)
         cards.append(
             Card(
                 id=card_id,
                 capture_id=capture_id,
                 order_no=len(cards) + 1,
                 title=region.title,
-                card_type=card_type_of(region),
+                card_type=card_type,
                 content=content,
                 original_content=content,
                 bbox=vision.normalized(box, w, h),

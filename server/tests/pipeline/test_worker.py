@@ -118,6 +118,19 @@ def test_processes_photo_into_cards(db, owner, ai):
     assert crop[..., 3].max() == 255  # 필기 부분은 보인다
 
 
+def test_latex_is_normalized_except_code_cards(db, owner, ai):
+    """수식 · 글 카드는 앱이 그릴 수 있게 정리하고, 코드 카드는 글자 그대로 둔다"""
+    ai["answer"] = [
+        region(lines=["$\\\\frac{1}{2}$ 일 때"]),
+        region(card_type="code", lines=['printf("\\\\n")']),
+    ]
+    capture = run(db, uploaded(db, owner, screen_photo()).id)
+
+    math, code = cards_of(db, capture)
+    assert math.content == math.original_content == "$\\frac{1}{2}$ 일 때"
+    assert code.content == 'printf("\\\\n")'
+
+
 def test_rectified_photo_is_straightened_and_shrunk(db, owner, ai):
     capture = run(db, uploaded(db, owner, screen_photo()).id)
     rectified = cv2.imdecode(
