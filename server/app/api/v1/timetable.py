@@ -1,9 +1,13 @@
-"""시간표 API. 지금은 캡처에서 과목 후보만 뽑고 저장하지 않는다 (DB 스키마 확정 전)."""
+"""시간표 인식 API. 에브리타임 캡처에서 과목 후보만 뽑고 저장하지 않는다.
+
+저장은 학기 API(PUT /semesters/timetable · PUT /semesters/{id}/timetable)가 한다.
+"""
 
 from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
+from app.api.deps import UserDep
 from app.schemas.timetable import TimetableParseResult
 from app.services import timetable_ocr
 from app.services.llm import LLMError
@@ -17,9 +21,11 @@ MAX_BYTES = 10 * 1024 * 1024
 
 
 @router.post("/parse", response_model=TimetableParseResult)
-def parse(image: Annotated[UploadFile, File()]):
+def parse(image: Annotated[UploadFile, File()], user: UserDep):
     """에브리타임 시간표 캡처를 받아 과목 후보를 돌려준다.
 
+    부를 때마다 AI를 쓰므로 로그인한 사용자만 받는다 (#128). 토큰이 없거나 틀리면
+    본문을 실행하기 전에 401로 끝나서 AI를 부르지 않는다. 읽기만 해서 WriteUserDep은 쓰지 않는다.
     AI 호출이 오래 막히므로 async가 아닌 일반 함수로 둔다 (FastAPI가 스레드에서 돌린다).
     """
     if image.content_type not in ALLOWED_TYPES:
