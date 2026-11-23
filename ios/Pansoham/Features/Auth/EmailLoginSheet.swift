@@ -115,25 +115,29 @@ struct EmailLoginSheet: View {
     private var trimmedEmail: String { email.trimmingCharacters(in: .whitespaces) }
     private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
 
+    /// 글자 수는 서버(파이썬 len)처럼 유니코드 코드 포인트로 세요.
+    /// 화면 글자 수(`count`)로 세면 이모지 · 국기처럼 한 글자가 여러 코드 포인트인 입력을 앱은 통과시키고 서버는 거절해요.
+    private func length(_ text: String) -> Int { text.unicodeScalars.count }
+
     private var emailLooksValid: Bool {
-        trimmedEmail.count <= 254 && trimmedEmail.wholeMatch(of: /[^@\s]+@[^@\s]+\.[^@\s]+/) != nil
+        length(trimmedEmail) <= 254 && trimmedEmail.wholeMatch(of: /[^@\s]+@[^@\s]+\.[^@\s]+/) != nil
     }
 
     /// 입력칸 아래 빨간 안내. 아직 입력하지 않은 칸은 탓하지 않아요.
     private var problem: String? {
         if !email.isEmpty, mode == .signup, !emailLooksValid { return "이메일 형식이 맞지 않아요." }
         guard mode == .signup else { return nil }
-        if !password.isEmpty, !(8...64).contains(password.count) { return "비밀번호는 8~64자로 입력해 주세요." }
+        if !password.isEmpty, !(8...64).contains(length(password)) { return "비밀번호는 8~64자로 입력해 주세요." }
         if !passwordAgain.isEmpty, passwordAgain != password { return "비밀번호가 서로 달라요." }
-        if trimmedName.count > 50 { return "이름은 50자까지 입력할 수 있어요." }
+        if length(trimmedName) > 50 { return "이름은 50자까지 입력할 수 있어요." }
         return nil
     }
 
     private var canSubmit: Bool {
-        guard !working, !trimmedEmail.isEmpty, !password.isEmpty, password.count <= 64 else { return false }
+        guard !working, !trimmedEmail.isEmpty, !password.isEmpty, length(password) <= 64 else { return false }
         guard mode == .signup else { return true }
-        return emailLooksValid && password.count >= 8 && passwordAgain == password
-            && !trimmedName.isEmpty && trimmedName.count <= 50
+        return emailLooksValid && length(password) >= 8 && passwordAgain == password
+            && !trimmedName.isEmpty && length(trimmedName) <= 50
     }
 
     // MARK: 보내기

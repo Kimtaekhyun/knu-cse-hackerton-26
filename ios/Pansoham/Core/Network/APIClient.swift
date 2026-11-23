@@ -149,6 +149,8 @@ enum APIClient {
                 if http.statusCode == 404 { throw APIError.notFound(failure.detail) }
                 throw APIError.server(failure.detail)
             }
+            // 422 는 detail 이 목록이라 위에서 못 읽어요. 앱 입력 검사를 빠져나간 값이에요
+            if http.statusCode == 422 { throw APIError.server("입력한 값을 다시 확인해 주세요.") }
             throw APIError.invalidResponse
         }
         return data
