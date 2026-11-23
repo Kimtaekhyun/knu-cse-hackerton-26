@@ -45,9 +45,10 @@ final class AuthSession {
         return try await finishKakao(kakaoToken, allowDuplicateEmail: true)
     }
 
-    /// 이메일로 가입해요. 같은 이메일의 계정이 있으면 `APIError.conflict` 를 던져요.
+    /// 이메일로 가입만 해요. 로그인은 따로 해요 (가입 완료 안내 → 로그인, #120).
+    /// 서버가 함께 준 토큰은 저장하지 않아요. 같은 이메일의 계정이 있으면 `APIError.conflict` 를 던져요.
     func signupWithEmail(email: String, password: String, name: String) async throws {
-        save(try await AuthAPI.signupEmail(email: email, password: password, name: name))
+        _ = try await AuthAPI.signupEmail(email: email, password: password, name: name)
     }
 
     /// 이메일로 로그인해요.
