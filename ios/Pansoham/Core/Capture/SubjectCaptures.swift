@@ -165,6 +165,12 @@ final class SubjectCaptures {
             guard self.source == source else { return }
             items = loaded
             state = .loaded
+            // 로컬 알림: 미분류함 21시 · 수업 후 정리 취소 (#125)
+            switch source {
+            case .unsorted: LocalNotifications.shared.unsortedChanged(count: loaded.count)
+            case .unmoved: LocalNotifications.shared.unmovedChanged(loaded)
+            case .subject: break
+            }
         } catch {
             guard self.source == source else { return }
             state = .failed(error.localizedDescription)

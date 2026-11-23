@@ -48,16 +48,42 @@ enum HomeAPI {
         }
     }
 
-    /// `GET /home` 응답. 시험(`exam`)은 아직 메인에 자리가 없어 읽지 않아요.
+    /// 진행 중이거나 다가오는 시험 (학사일정 기준). 로컬 알림 시험 복습에 써요 (#125)
+    struct ExamDTO: Decodable, Hashable {
+        /// "midterm" · "final"
+        let kind: String
+        /// "2026-12-14"
+        let startsOn: String
+        let daysLeft: Int
+        let inProgress: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case kind
+            case startsOn = "starts_on", daysLeft = "days_left", inProgress = "in_progress"
+        }
+
+        /// "중간" · "기말"
+        var title: String { kind == "midterm" ? "중간" : "기말" }
+        var startDate: Date? {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            return formatter.date(from: startsOn)
+        }
+    }
+
+    /// `GET /home` 응답. 시험(`exam`)은 메인에 자리가 없어 로컬 알림에만 써요.
     struct HomeDTO: Decodable, Hashable {
         /// 오늘 요일의 수업 전부 (끝난 수업 포함), 시작 시각 순
         let today: [ClassDTO]
         let week: WeekDTO
         /// 정리가 끝난 판서 전체 수. 0이면 07(처음) 화면
         let totalCaptures: Int
+        /// 학교 · 학사일정이 없거나 기말까지 끝났으면 nil
+        let exam: ExamDTO?
 
         enum CodingKeys: String, CodingKey {
-            case today, week
+            case today, week, exam
             case totalCaptures = "total_captures"
         }
     }

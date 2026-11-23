@@ -79,6 +79,11 @@ final class AuthSession {
         // 내 계정 화면의 이름 · 학교 (앱에서 고칠 수 있는 값이라 로그인할 때만 서버 값으로 채워요)
         UserDefaults.standard.set(response.user.name, forKey: "profileName")
         if let school = response.user.school { UserDefaults.standard.set(school, forKey: "profileSchool") }
+        // 알림 스위치 (#125)
+        if let settings = response.user.settings {
+            UserDefaults.standard.set(settings.notifyUnmoved, forKey: "notifyCleanup")
+            UserDefaults.standard.set(settings.notifyExam, forKey: "notifyExam")
+        }
     }
 
     /// 앱을 켰을 때 저장된 토큰이 아직 유효한지 확인해요.
@@ -100,6 +105,8 @@ final class AuthSession {
     }
 
     private func clear() {
+        // 다른 사용자에게 알림이 남지 않게 (#125)
+        LocalNotifications.removeAll()
         Keychain.delete(Self.tokenKey)
         accessToken = nil
         user = nil

@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct MyApp: App {
@@ -7,6 +8,8 @@ struct MyApp: App {
     init() {
         AppFonts.register()
         KakaoLogin.configure()
+        // 앱을 쓰는 중에도 알림 배너 · 누르면 화면 이동 (#125)
+        UNUserNotificationCenter.current().delegate = LocalNotifications.shared
     }
 
     var body: some Scene {
