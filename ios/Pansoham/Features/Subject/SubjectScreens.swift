@@ -295,8 +295,11 @@ struct SubjectLessonsScreen: View {
     private var store: SubjectCaptures { .shared }
     /// 서버 판서를 보여 주는지 (로그인 + 실제 과목)
     private var isLive: Bool { store.isLive(router.subject) }
+    // 목록을 모든 과목이 같이 써서, 지금 과목 것인지 확인
+    private var isMine: Bool { store.subjectID != nil && store.subjectID == router.subject?.id }
     private var allLessons: [Lesson] {
         guard isLive else { return lessons.filter { !hiddenSamples.contains($0.id) } }
+        guard isMine else { return [] }
         return store.lessons.enumerated().map { index, lesson in
             let tags = lesson.tags
             return Lesson(id: index, date: lesson.title, summary: lesson.summary, today: lesson.isToday,
@@ -356,7 +359,7 @@ struct SubjectLessonsScreen: View {
 
             CaptureFAB { router.push(.capture) }
         }
-        .task { await reload() }
+        .task(id: router.subject?.id) { await reload() }
         
     }
 
@@ -425,7 +428,7 @@ struct SubjectLessonsScreen: View {
         if case .failed(let message) = store.state {
             return AnyView(FolderLoadFailed(message: message) { Task { await reload() } })
         }
-        return store.items.isEmpty ? AnyView(ProgressView().controlSize(.large)) : nil
+        return !isMine || store.items.isEmpty ? AnyView(ProgressView().controlSize(.large)) : nil
     }
 
     private func row(_ lesson: Lesson) -> some View {
@@ -486,8 +489,10 @@ struct SubjectCardsScreen: View {
     private var store: SubjectCaptures { .shared }
     /// 서버 판서를 보여 주는지 (로그인 + 실제 과목)
     private var isLive: Bool { store.isLive(router.subject) }
+    // 목록을 모든 과목이 같이 써서, 지금 과목 것인지 확인
+    private var isMine: Bool { store.subjectID != nil && store.subjectID == router.subject?.id }
     /// 서버 카드와 그 카드의 판서
-    private var liveCards: [(sticker: Sticker, item: SubjectCaptures.Item)] { isLive ? store.stickers : [] }
+    private var liveCards: [(sticker: Sticker, item: SubjectCaptures.Item)] { isLive && isMine ? store.stickers : [] }
     private var all: [Sticker] { isLive ? liveCards.map(\.sticker) : SampleData.subjectStickers }
     private var filters: [(name: String, count: Int)] {
         guard isLive else { return [("전체", 34), ("수식", 9), ("코드", 6), ("텍스트", 19)] }
@@ -598,7 +603,7 @@ struct SubjectCardsScreen: View {
                     .transition(.opacity.combined(with: .offset(y: 40)))
             }
         }
-        .task { await reload() }
+        .task(id: router.subject?.id) { await reload() }
     }
 
     /// 카드를 누르면: 서버 카드면 그 판서의 결과 화면, 샘플이면 카드 상세
@@ -621,7 +626,7 @@ struct SubjectCardsScreen: View {
         if case .failed(let message) = store.state {
             return AnyView(FolderLoadFailed(message: message) { Task { await reload() } })
         }
-        return store.items.isEmpty ? AnyView(ProgressView().controlSize(.large)) : nil
+        return !isMine || store.items.isEmpty ? AnyView(ProgressView().controlSize(.large)) : nil
     }
 
     private func toggle(_ id: Int) {
@@ -655,7 +660,7 @@ struct SubjectEmptyScreen: View {
             .frame(width: DS.width)
             .at(0, 330)
         }
-        .task { await reload() }
+        .task(id: router.subject?.id) { await reload() }
     }
 
     /// 판서 수는 0 이었지만 그사이 찍은 판서가 있으면 수업별(15)로 바꿔요.
@@ -739,7 +744,7 @@ extension SubjectLessonsScreen {
         .overlay(alignment: .bottomTrailing) {
             NarrowFAB { router.push(.capture) }.padding(20)
         }
-        .task { await reload() }
+        .task(id: router.subject?.id) { await reload() }
         
     }
 }
@@ -821,7 +826,7 @@ extension SubjectCardsScreen {
                 }
             }
         })
-        .task { await reload() }
+        .task(id: router.subject?.id) { await reload() }
     }
 
     /// 고른 카드 (화면 순서)
@@ -880,7 +885,7 @@ extension SubjectEmptyScreen {
             .frame(maxWidth: .infinity)
             .padding(.top, size.height * 0.14)
         }, bottom: { EmptyView() })
-        .task { await reload() }
+        .task(id: router.subject?.id) { await reload() }
     }
 }
 
