@@ -151,8 +151,11 @@ enum MathLine {
     /// - \tfrac · \dfrac → \frac
     /// - \textcircled{3} → 수식 밖 글자 ③ (수학 글꼴에 동그라미 숫자가 없어서)
     static func mathTokens(_ latex: String) -> [Token] {
-        let source = latex.replacingOccurrences(
-            of: #"\\[td]frac(?![a-zA-Z])"#, with: "\\\\frac", options: .regularExpression)
+        // 서버가 저장 전에 정리하지만(latex.py), 그 전에 저장된 카드를 위해 여기서도 한 번 더
+        let source = latex
+            // \\frac 처럼 두 번 쓴 명령 → \frac (진짜 줄바꿈 \\ 뒤에는 보통 빈칸 · & 가 와요)
+            .replacingOccurrences(of: #"\\\\(?=[a-zA-Z])"#, with: "\\\\", options: .regularExpression)
+            .replacingOccurrences(of: #"\\[td]frac(?![a-zA-Z])"#, with: "\\\\frac", options: .regularExpression)
         let circled = try! NSRegularExpression(pattern: #"\\textcircled\s*\{([^{}]*)\}"#)
         let ns = source as NSString
         var tokens: [Token] = []
