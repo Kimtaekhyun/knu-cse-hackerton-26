@@ -46,7 +46,7 @@ def calendar_lookups(monkeypatch):
     찾기 자체는 tests/test_academic_calendar.py에서 따로 확인한다.
     """
     calls: list[tuple] = []
-    monkeypatch.setattr(academic_calendar, "request_lookup", lambda *key: calls.append(key))
+    monkeypatch.setattr(academic_calendar, "request_lookup", lambda db, *key: calls.append(key))
     return calls
 
 

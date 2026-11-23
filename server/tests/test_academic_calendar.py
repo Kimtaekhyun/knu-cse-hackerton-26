@@ -67,22 +67,15 @@ def test_first_term_starts_in_spring():
     assert usable(spring, 2027, SECOND) is None
 
 
-# ---------- 찾기 · 다시 찾지 않기 ----------
+# ---------- 찾아서 저장하기 ----------
+# 다시 찾지 않기 · 하루 한도는 검색 기록(DB)을 써서
+# tests/db/test_academic_calendar_db.py에서 확인한다
 
 
 @pytest.fixture(autouse=True)
 def fresh_state(monkeypatch):
-    """테스트마다 찾는 중 · 못 찾은 기록을 비우고, 뒤에서 도는 작업 대신 기록만 남긴다"""
-    monkeypatch.setattr(service, "_running", set())
-    monkeypatch.setattr(service, "_failed", {})
-    submitted: list = []
-
-    class FakeExecutor:
-        def submit(self, fn, key):
-            submitted.append(key)
-
-    monkeypatch.setattr(service, "_executor", FakeExecutor())
-    return submitted
+    """테스트마다 찾는 중 기록을 비운다"""
+    monkeypatch.setattr(service, "_running", {KEY})
 
 
 @pytest.fixture
@@ -104,7 +97,7 @@ def test_lookup_saves_checked_dates(monkeypatch, saved):
     monkeypatch.setattr(service, "search", lambda *key: found())
     assert service.lookup(KEY, session_factory=FakeSession)
     assert saved == [(*KEY, found())]
-    assert KEY not in service._failed
+    assert KEY not in service._running
 
 
 @pytest.mark.parametrize(
@@ -114,46 +107,24 @@ def test_lookup_saves_checked_dates(monkeypatch, saved):
         (found(final=date(2027, 1, 12)), found(final=None)),  # 범위 밖 기말은 비움
     ],
 )
-def test_lookup_saves_start_and_retries_later(monkeypatch, saved, result, stored):
+def test_lookup_saves_start_only(monkeypatch, saved, result, stored):
     monkeypatch.setattr(service, "search", lambda *key: result)
-    assert not service.lookup(KEY, session_factory=FakeSession)
+    assert not service.lookup(KEY, session_factory=FakeSession)  # 아직 다 못 찾음
     assert saved == [(*KEY, stored)]
-    assert KEY in service._failed  # 하루 뒤 다시 찾아 기말을 채운다
 
 
 @pytest.mark.parametrize("result", [None, found(start=None), found(start=date(2026, 3, 2))])
-def test_lookup_without_good_dates_remembers_failure(monkeypatch, saved, result):
+def test_lookup_without_good_start_saves_nothing(monkeypatch, saved, result):
     monkeypatch.setattr(service, "search", lambda *key: result)
     assert not service.lookup(KEY, session_factory=FakeSession)
     assert saved == []
-    assert KEY in service._failed
+    assert KEY not in service._running
 
 
-def test_lookup_error_remembers_failure(monkeypatch, saved):
+def test_lookup_error_is_not_raised(monkeypatch, saved):
     def broken(*key):
         raise service.claude.ClaudeError("ANTHROPIC_API_KEY가 설정되지 않았어요.")
 
     monkeypatch.setattr(service, "search", broken)
     assert not service.lookup(KEY, session_factory=FakeSession)
-    assert KEY in service._failed
-
-
-def test_request_lookup_runs_once_while_running(fresh_state):
-    service.request_lookup(*KEY)
-    service.request_lookup(*KEY)
-    assert fresh_state == [KEY]
-
-
-def test_recent_failure_is_not_searched_again(fresh_state, monkeypatch):
-    service._failed[KEY] = service.time.time()
-    service.request_lookup(*KEY)
-    assert fresh_state == []
-    # RETRY_AFTER가 지나면 다시 찾는다
-    service._failed[KEY] = service.time.time() - service.RETRY_AFTER - 1
-    service.request_lookup(*KEY)
-    assert fresh_state == [KEY]
-
-
-def test_seasonal_term_is_not_searched(fresh_state):
-    service.request_lookup("부산대학교", 2026, SemesterTerm.summer)
-    assert fresh_state == []
+    assert KEY not in service._running

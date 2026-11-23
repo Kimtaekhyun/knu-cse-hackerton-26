@@ -9,25 +9,26 @@
   범위를 벗어난 시험 시작일은 그 칸만 비운다. 빈 칸은 실제 개강일 기준 8 · 15주차로 채워진다
 - 시험 시작일이 빈 학사일정은 RETRY_AFTER초마다 다시 찾아 빈 칸만 채운다
   (학교가 시험 일정을 늦게 올리는 경우)
-- 같은 학교 · 학기는 찾는 중이면 다시 찾지 않고, 못 찾았으면 RETRY_AFTER초 동안 다시 찾지 않는다
+- 같은 학교 · 학기는 찾는 중이거나 마지막 검색 뒤 RETRY_AFTER초가 안 지났으면 다시 찾지 않는다
+- 모든 학교를 합쳐 RETRY_AFTER초 동안 DAILY_LIMIT번까지만 찾는다 (넘으면 추정 개강일)
+- 검색 기록은 calendar_searches 테이블에 남겨서 서버를 다시 켜도 유지된다
 - 저장한 학사일정은 같은 학교 사용자가 함께 쓴다 (school, year, term 유일)
 """
 
 import logging
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import anthropic
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
-from app.models import AcademicCalendar, Semester, SemesterTerm, User
+from app.models import AcademicCalendar, CalendarSearch, Semester, SemesterTerm, User
 from app.services import claude, exam_schedule
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,9 @@ MIDTERM_WEEKS = range(5, 11)
 FINAL_WEEKS = range(12, 19)
 # 못 찾았거나 시험 시작일이 빈 학교 · 학기를 다시 찾기까지 기다리는 초
 RETRY_AFTER = 24 * 60 * 60
+# 모든 학교를 합쳐 RETRY_AFTER초 동안 할 수 있는 검색 수
+# (학교 이름을 바꿔 가며 저장해도 요금이 한도를 넘지 않게)
+DAILY_LIMIT = 30
 # 요청 한 번에 웹 검색을 몇 번까지 하게 할지 (검색 1번에 요금이 붙는다)
 MAX_SEARCHES = 3
 # 생각 깊이. 날짜 몇 개를 뽑는 일이라 낮게 둔다
@@ -89,9 +93,9 @@ def calendar_for(db: Session, user: User) -> AcademicCalendar | None:
         saved = saved_calendar(db, user.school, semester.year, semester.term)
         if saved is not None:
             if not complete(saved):  # 시험 시작일이 비었으면 다시 찾아 채운다 (하루 한 번까지)
-                request_lookup(user.school, semester.year, semester.term)
+                request_lookup(db, user.school, semester.year, semester.term)
             return saved
-        request_lookup(user.school, semester.year, semester.term)
+        request_lookup(db, user.school, semester.year, semester.term)
     return exam_schedule.estimated_calendar(user.school or "", semester.year, semester.term)
 
 
@@ -183,38 +187,65 @@ def save(db: Session, school: str, year: int, term: SemesterTerm, found: FoundDa
 
 _executor: ThreadPoolExecutor | None = None
 _lock = threading.Lock()
-_running: set[Key] = set()  # 지금 찾는 중
-_failed: dict[Key, float] = {}  # 못 찾은 시각
+_running: set[Key] = set()  # 지금 찾는 중 (이 서버 안에서)
 
 
-def request_lookup(school: str, year: int, term: SemesterTerm) -> None:
-    """학사일정을 뒤에서 찾게 한다. 이미 찾는 중이거나 최근에 못 찾았으면 아무것도 안 한다"""
+def request_lookup(db: Session, school: str, year: int, term: SemesterTerm) -> bool:
+    """학사일정을 뒤에서 찾게 한다. 찾기 시작했으면 True.
+
+    찾지 않는 경우: 계절학기 · 찾는 중 · 같은 학교 · 학기를 RETRY_AFTER초 안에 찾은 적 있음 ·
+    모든 학교를 합친 검색 수가 DAILY_LIMIT에 닿음
+    """
     if term not in TERM_NAMES:
-        return
+        return False
     key = (school, year, term)
+    since = datetime.now(UTC) - timedelta(seconds=RETRY_AFTER)
     global _executor
     with _lock:
-        if key in _running or time.time() - _failed.get(key, float("-inf")) < RETRY_AFTER:
-            return
+        if key in _running:
+            return False
+        recent = db.scalar(
+            select(
+                exists().where(
+                    CalendarSearch.school == school,
+                    CalendarSearch.year == year,
+                    CalendarSearch.term == term,
+                    CalendarSearch.searched_at > since,
+                )
+            )
+        )
+        if recent:
+            return False
+        searches = db.scalar(
+            select(func.count())
+            .select_from(CalendarSearch)
+            .where(CalendarSearch.searched_at > since)
+        )
+        if searches >= DAILY_LIMIT:
+            logger.warning("학사일정 검색 하루 한도(%d번) 도달: %s %s %s 건너뜀", DAILY_LIMIT, *key)
+            return False
+        db.add(CalendarSearch(school=school, year=year, term=term))
+        db.commit()
         _running.add(key)
         if _executor is None:
             _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="calendar")
     _executor.submit(lookup, key)
+    return True
 
 
 def lookup(key: Key, session_factory=SessionLocal) -> bool:
     """찾아서 확인하고 저장한다. 세 날짜를 모두 저장했으면 True.
 
-    개강일만 찾았으면 저장은 하되 False (RETRY_AFTER초 뒤 다시 찾아 시험 시작일을 채운다).
-    못 찾았으면 RETRY_AFTER초 동안 다시 찾지 않는다.
+    개강일만 찾았으면 저장은 하되 False. 시험 시작일이 빈 학사일정은 RETRY_AFTER초 뒤
+    누군가 메인을 열 때 다시 찾아 채운다 (request_lookup이 검색 기록으로 간격을 지킨다).
     """
     school, year, term = key
+    ok = False
     try:
         found = search(school, year, term)
         dates = usable(found, year, term) if found is not None else None
         if dates is None:
             logger.info("학사일정 못 찾음: %s %s %s → 추정 개강일 사용 (%s)", *key, found)
-            ok = False
         else:
             with session_factory() as db:
                 save(db, school, year, term, dates)
@@ -222,9 +253,7 @@ def lookup(key: Key, session_factory=SessionLocal) -> bool:
             ok = complete(dates)
     except (claude.ClaudeError, anthropic.AnthropicError, ValueError) as error:
         logger.warning("학사일정 검색 실패: %s %s %s (%s)", *key, error)
-        ok = False
-    with _lock:
-        _running.discard(key)
-        if not ok:
-            _failed[key] = time.time()
+    finally:
+        with _lock:
+            _running.discard(key)
     return ok

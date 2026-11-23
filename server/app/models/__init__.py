@@ -2,13 +2,14 @@
 
 from app.models.capture import Capture, Card
 from app.models.enums import AuthProvider, CaptureStatus, CardType, SemesterTerm
-from app.models.semester import AcademicCalendar, Semester
+from app.models.semester import AcademicCalendar, CalendarSearch, Semester
 from app.models.subject import Subject, SubjectSlot
 from app.models.user import User, UserSettings
 
 __all__ = [
     "AcademicCalendar",
     "AuthProvider",
+    "CalendarSearch",
     "Capture",
     "CaptureStatus",
     "Card",
