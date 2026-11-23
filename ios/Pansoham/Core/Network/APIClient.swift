@@ -29,10 +29,13 @@ enum APIError: LocalizedError {
     case unauthorized
     /// 서버가 404 로 답했어요 (예: 아직 현재 학기가 없음)
     case notFound(String)
+    /// 서버가 409 로 답하며 이유를 `code` 로 알려 줬어요 (예: 같은 이메일의 계정이 있음, #120).
+    /// `email` 은 같은 이메일 안내에서만 와요.
+    case conflict(code: String, message: String, email: String?)
 
     var errorDescription: String? {
         switch self {
-        case .server(let message), .notFound(let message): message
+        case .server(let message), .notFound(let message), .conflict(_, let message, _): message
         case .unauthorized: "로그인이 만료됐어요. 다시 로그인해 주세요."
         case .unreachable: "서버에 연결할 수 없어요. 서버가 켜져 있는지 확인해 주세요."
         case .invalidResponse: "서버 응답을 읽지 못했어요."
@@ -138,10 +141,16 @@ enum APIClient {
                 AuthSession.shared.didExpire()
                 throw APIError.unauthorized
             }
+            if let coded = try? JSONDecoder().decode(CodedFailure.self, from: data) {
+                let detail = coded.detail
+                throw APIError.conflict(code: detail.code, message: detail.message, email: detail.email)
+            }
             if let failure = try? JSONDecoder().decode(ServerFailure.self, from: data) {
                 if http.statusCode == 404 { throw APIError.notFound(failure.detail) }
                 throw APIError.server(failure.detail)
             }
+            // 422 는 detail 이 목록이라 위에서 못 읽어요. 앱 입력 검사를 빠져나간 값이에요
+            if http.statusCode == 422 { throw APIError.server("입력한 값을 다시 확인해 주세요.") }
             throw APIError.invalidResponse
         }
         return data
@@ -169,5 +178,15 @@ enum APIClient {
     /// FastAPI 오류 응답 `{"detail": "..."}`
     private struct ServerFailure: Decodable {
         let detail: String
+    }
+
+    /// 앱이 이유를 보고 안내를 골라야 하는 오류 `{"detail": {"code", "message", "email"?}}` (409)
+    private struct CodedFailure: Decodable {
+        struct Detail: Decodable {
+            let code: String
+            let message: String
+            let email: String?
+        }
+        let detail: Detail
     }
 }

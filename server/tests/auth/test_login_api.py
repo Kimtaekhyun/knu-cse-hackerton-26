@@ -59,13 +59,50 @@ def test_login_does_not_overwrite_edited_name(client, db, kakao):
     assert login(client).json()["user"]["name"] == "앱에서 고친 이름"
 
 
-def test_same_email_user_of_other_provider_is_separate(client, db):
-    other = make_user(
-        db, provider=AuthProvider.email, provider_uid="3001", email="user@example.com"
-    )
-    body = login(client).json()
+def make_email_user(db, email="user@example.com"):
+    return make_user(db, provider=AuthProvider.email, provider_uid=email, email=email)
+
+
+def count_users(db) -> int:
+    return db.scalar(select(func.count()).select_from(User))
+
+
+def test_first_login_with_email_account_email_is_409(client, db, kakao):
+    # 카카오 이메일은 대소문자가 섞여 있을 수 있다. 이메일 계정은 소문자로 저장된다
+    make_email_user(db)
+    kakao.account["email"] = "User@Example.COM"
+    response = login(client)
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "email_account_exists",
+        "message": "이 이메일로 가입한 계정이 있어요.",
+        # 앱이 이메일 로그인 화면의 이메일 칸을 미리 채운다 (카카오가 확인한 본인 이메일)
+        "email": "user@example.com",
+    }
+    assert count_users(db) == 1
+
+
+def test_allow_duplicate_email_creates_separate_kakao_user(client, db):
+    other = make_email_user(db)
+    response = client.post(LOGIN, json={"access_token": "t", "allow_duplicate_email": True})
+    body = response.json()
     assert body["is_new_user"] is True
     assert body["user"]["id"] != str(other.id)
+    assert body["user"]["provider"] == "kakao"
+
+
+def test_existing_kakao_user_is_not_asked_about_email_account(client, db):
+    first = login(client).json()
+    make_email_user(db)
+    second = login(client)
+    assert second.status_code == 200
+    assert second.json()["user"]["id"] == first["user"]["id"]
+
+
+def test_kakao_user_with_same_email_does_not_block_kakao_login(client, db, kakao):
+    # 막는 건 이메일 계정과 겹칠 때뿐이다
+    make_user(db, provider=AuthProvider.kakao, provider_uid="9999", email="user@example.com")
+    assert login(client).status_code == 200
 
 
 def test_no_consent_still_signs_up(client, kakao):

@@ -11,7 +11,9 @@ from app.core.security import (
     AuthNotConfigured,
     InvalidToken,
     create_access_token,
+    hash_password,
     read_access_token,
+    verify_password,
 )
 
 
@@ -77,3 +79,21 @@ def test_missing_secret(monkeypatch):
             create_access_token(uuid.uuid4())
     finally:
         get_settings.cache_clear()
+
+
+def test_password_hash_is_not_plain_text():
+    hashed = hash_password("correct horse")
+    assert "correct horse" not in hashed
+    assert hashed.startswith("$argon2")
+
+
+def test_verify_password():
+    hashed = hash_password("correct horse")
+    assert verify_password("correct horse", hashed)
+    assert not verify_password("wrong horse", hashed)
+
+
+def test_verify_password_without_hash_is_false():
+    # 사용자가 없거나 비밀번호가 없는 계정(카카오)이어도 예외 없이 False
+    assert not verify_password("correct horse", None)
+    assert not verify_password("correct horse", "not-a-hash")

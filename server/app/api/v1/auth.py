@@ -1,4 +1,6 @@
-"""로그인 API. 카카오 토큰을 확인하고 우리 토큰(JWT)을 발급한다.
+"""로그인 API. 카카오 토큰이나 이메일 · 비밀번호를 확인하고 우리 토큰(JWT)을 발급한다.
+
+같은 이메일의 계정이 겹칠 때는 409에 {code, message}를 담아 앱이 code로 안내 창을 고르게 한다.
 
 내 정보 조회 · 수정(GET · PATCH /me)은 app/api/v1/me.py에 있다.
 """
@@ -13,11 +15,45 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.security import create_access_token
 from app.db.session import get_db
-from app.schemas.auth import KakaoLoginRequest, LoginResponse, UserOut
+from app.models import AuthProvider, User
+from app.schemas.auth import (
+    EmailLoginRequest,
+    EmailSignupRequest,
+    KakaoLoginRequest,
+    LoginResponse,
+    UserOut,
+)
 from app.services import auth as auth_service
 from app.services import social_auth
 
 router = APIRouter(tags=["auth"])
+
+DbDep = Annotated[Session, Depends(get_db)]
+WRONG_LOGIN = "이메일 또는 비밀번호가 맞지 않아요."
+EMAIL_TAKEN = {
+    AuthProvider.email: ("email_taken", "이미 가입한 이메일이에요."),
+    AuthProvider.kakao: (
+        "kakao_account_exists",
+        "카카오로 가입한 이메일이에요. 카카오로 로그인해 주세요.",
+    ),
+}
+
+
+def _conflict(code: str, message: str, **extra: str) -> HTTPException:
+    return HTTPException(409, {"code": code, "message": message, **extra})
+
+
+def _require_jwt_secret() -> None:
+    if not get_settings().jwt_secret:
+        raise HTTPException(503, "서버에 로그인 설정이 없어요.")
+
+
+def _login_response(user: User, is_new: bool) -> LoginResponse:
+    return LoginResponse(
+        access_token=create_access_token(user.id),
+        is_new_user=is_new,
+        user=UserOut.model_validate(user),
+    )
 
 
 def kakao_http() -> Iterator[httpx.Client]:
@@ -29,10 +65,13 @@ def kakao_http() -> Iterator[httpx.Client]:
 @router.post("/auth/kakao", response_model=LoginResponse)
 def login_kakao(
     body: KakaoLoginRequest,
-    db: Annotated[Session, Depends(get_db)],
+    db: DbDep,
     http: Annotated[httpx.Client, Depends(kakao_http)],
 ):
     """카카오 로그인. 처음이면 가입(사용자 · 기본 설정 생성)까지 한다.
+
+    처음 가입인데 같은 이메일의 이메일 계정이 있으면 409 email_account_exists.
+    앱이 "카카오로 새로 가입"을 고르면 allow_duplicate_email: true로 다시 보낸다.
 
     카카오 호출이 막히므로 async가 아닌 일반 함수로 둔다 (FastAPI가 스레드에서 돌린다).
     """
@@ -48,9 +87,34 @@ def login_kakao(
     except social_auth.KakaoUnavailable as error:
         message = "카카오 서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요."
         raise HTTPException(502, message) from error
-    user, is_new = auth_service.login_kakao(db, profile)
-    return LoginResponse(
-        access_token=create_access_token(user.id),
-        is_new_user=is_new,
-        user=UserOut.model_validate(user),
-    )
+    try:
+        user, is_new = auth_service.login_kakao(db, profile, body.allow_duplicate_email)
+    except auth_service.EmailAccountExists as error:
+        # 이메일은 카카오가 확인한 본인 것이다. 앱이 이메일 로그인 칸을 미리 채운다
+        message = "이 이메일로 가입한 계정이 있어요."
+        raise _conflict("email_account_exists", message, email=error.email) from error
+    return _login_response(user, is_new)
+
+
+@router.post("/auth/email/signup", response_model=LoginResponse, status_code=201)
+def signup_email(body: EmailSignupRequest, db: DbDep):
+    """이메일 가입. 사용자 · 기본 설정을 만들고 바로 로그인한 토큰을 준다.
+
+    같은 이메일의 계정이 있으면 409 (email_taken · kakao_account_exists).
+    """
+    _require_jwt_secret()
+    try:
+        user = auth_service.signup_email(db, body)
+    except auth_service.EmailTaken as error:
+        raise _conflict(*EMAIL_TAKEN[error.provider]) from error
+    return _login_response(user, True)
+
+
+@router.post("/auth/email/login", response_model=LoginResponse)
+def login_email(body: EmailLoginRequest, db: DbDep):
+    """이메일 로그인. 없는 이메일과 틀린 비밀번호는 같은 401이라 가입 여부가 드러나지 않는다."""
+    _require_jwt_secret()
+    user = auth_service.login_email(db, body.email, body.password)
+    if user is None:
+        raise HTTPException(401, WRONG_LOGIN)
+    return _login_response(user, False)

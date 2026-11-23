@@ -53,6 +53,16 @@ struct LoginScreen: View {
     /// 카카오 로그인 중이면 버튼을 막고 돌아가는 표시를 보여 줘요.
     @State private var loggingIn = false
     @State private var errorMessage: String?
+    /// 이메일 로그인 · 회원가입 창 (#120)
+    @State private var emailSheet: EmailSheet?
+    /// 첫 카카오 로그인인데 같은 이메일의 이메일 계정이 있어요 (409 email_account_exists). 그 이메일
+    @State private var duplicateEmail: String?
+
+    /// 이메일 창을 열 때 미리 채울 값
+    private struct EmailSheet: Identifiable {
+        let id = UUID()
+        var email = ""
+    }
 
     var body: some View {
         Adaptive { wide } narrow: { narrow($0) }
@@ -63,22 +73,54 @@ struct LoginScreen: View {
             } message: {
                 Text(errorMessage ?? "")
             }
+            .alert("이 이메일로 가입한 계정이 있어요", isPresented: Binding(
+                get: { duplicateEmail != nil }, set: { if !$0 { duplicateEmail = nil } }
+            ), presenting: duplicateEmail) { email in
+                Button("이메일로 로그인") { emailSheet = EmailSheet(email: email) }
+                Button("카카오로 새로 가입") { signupWithKakaoAnyway() }
+                Button("취소", role: .cancel) {}
+            } message: { email in
+                Text("\(email)(으)로 이메일 가입한 계정이 있어요. 이메일로 로그인하면 그 계정의 시간표와 판서를 볼 수 있어요. 카카오로 새로 가입하면 별개의 빈 계정이 만들어져요.")
+            }
+            .sheet(item: $emailSheet) { sheet in
+                EmailLoginSheet(email: sheet.email) { isNewUser in
+                    emailSheet = nil
+                    finish(isNewUser: isNewUser)
+                } onKakao: {
+                    loginWithKakao()
+                }
+            }
     }
 
-    /// 이메일 로그인은 아직 없어요 (#58 범위 밖). 지금은 예전처럼 다음 화면으로만 넘어가요.
-    private func next() { router.push(.timetableUpload) }
+    /// 이메일로 계속하기: 로그인 · 회원가입 창을 열어요.
+    private func openEmail() { emailSheet = EmailSheet() }
+
+    /// 로그인이 끝나면 처음 가입이면 시간표 등록, 아니면 홈
+    private func finish(isNewUser: Bool) {
+        router.reset(to: isNewUser ? .timetableUpload : .home)
+    }
 
     /// 카카오 로그인 → 서버 토큰 저장 → 처음 가입이면 시간표 등록, 아니면 홈
     private func loginWithKakao() {
+        runKakao { try await AuthSession.shared.loginWithKakao() }
+    }
+
+    /// 같은 이메일 안내에서 "카카오로 새로 가입"을 골랐어요. 카카오 로그인을 다시 띄우지 않아요.
+    private func signupWithKakaoAnyway() {
+        runKakao { try await AuthSession.shared.signupWithKakaoAnyway() }
+    }
+
+    private func runKakao(_ login: @escaping () async throws -> Bool) {
         guard !loggingIn else { return }
         loggingIn = true
         Task {
             defer { loggingIn = false }
             do {
-                let isNewUser = try await AuthSession.shared.loginWithKakao()
-                router.reset(to: isNewUser ? .timetableUpload : .home)
+                finish(isNewUser: try await login())
             } catch KakaoLoginError.cancelled {
                 // 사용자가 닫은 경우는 안내하지 않아요
+            } catch let APIError.conflict(code, _, email) where code == AuthAPI.ConflictCode.emailAccountExists {
+                duplicateEmail = email ?? ""
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -149,7 +191,7 @@ struct LoginScreen: View {
                 Text("카카오로 계속하기").v2(17, .bold, .black.opacity(0.85), tracking: -0.34)
             }
             .enter(t, at: 1.05, dy: 30)
-            loginButton(fill: .white, stroke: .border, action: next) {
+            loginButton(fill: .white, stroke: .border, action: openEmail) {
                 Text("이메일로 계속하기").v2(17, .bold, .ink, tracking: -0.34)
             }
             .enter(t, at: 1.15, dy: 30)
