@@ -19,7 +19,11 @@ struct SchoolPicker: View {
     @FocusState private var focused: Bool
 
     private var results: [String] { School.search(query) }
-    private var canSave: Bool { !saving && selected.map { results.contains($0) } == true }
+    /// 저장된 학교가 있는데 검색 칸을 비우고 아무것도 안 골랐으면 저장 = 학교 비우기 (#122)
+    private var clearing: Bool {
+        current != nil && selected == nil && query.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+    private var canSave: Bool { !saving && (clearing || selected.map { results.contains($0) } == true) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,7 +34,7 @@ struct SchoolPicker: View {
                 Spacer()
                 Text("학교").ds(17, .bold)
                 Spacer()
-                Button { if let selected { onSave(selected) } } label: {
+                Button { if let selected { onSave(selected) } else if clearing { onSave("") } } label: {
                     Text(saving ? "저장 중…" : "저장").ds(17, .bold, canSave ? .dsBlue : .dsSub)
                         .opacity(canSave ? 1 : 0.5)
                 }
@@ -75,7 +79,8 @@ struct SchoolPicker: View {
                 } else {
                     VStack(spacing: 0) {
                         ForEach(results, id: \.self) { school in
-                            Button { selected = school } label: {
+                            // 고른 학교를 다시 누르면 선택을 풀어요
+                            Button { selected = selected == school ? nil : school } label: {
                                 HStack {
                                     Text(school).ds(17, .bold)
                                     Spacer()
@@ -90,6 +95,9 @@ struct SchoolPicker: View {
                             .buttonStyle(.plain)
                         }
                     }
+                    if clearing {
+                        Text("저장하면 학교를 비워요").ds(13, .regular, .dsSub)
+                    }
                 }
             }
             .padding(.horizontal, 24)
@@ -103,6 +111,10 @@ struct SchoolPicker: View {
             selected = current.flatMap { School.supported.contains($0) ? $0 : nil }
             if let current { query = current }
             focused = true
+        }
+        // 검색 칸을 비우면 고른 학교도 풀어요 (#122)
+        .onChange(of: query) { _, new in
+            if new.trimmingCharacters(in: .whitespaces).isEmpty { selected = nil }
         }
     }
 }
