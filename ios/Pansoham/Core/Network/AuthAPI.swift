@@ -2,7 +2,11 @@
 //  AuthAPI.swift
 //  판서함
 //
-//  로그인 (서버 `POST /api/v1/auth/kakao`, `GET /api/v1/me`)
+//  로그인 (서버 `POST /api/v1/auth/kakao` · `/auth/email/signup` · `/auth/email/login`, `GET /api/v1/me`)
+//
+//  같은 이메일의 계정이 겹치면 서버가 409 로 답해요 (`APIError.conflict`, #120).
+//  - 이메일 가입: `email_taken` · `kakao_account_exists`
+//  - 첫 카카오 로그인: `email_account_exists` → "카카오로 새로 가입"을 고르면 `allowDuplicateEmail` 로 다시 보내요
 //
 
 import Foundation
@@ -46,15 +50,44 @@ enum AuthAPI {
         }
     }
 
+    /// 409 `code` 값
+    enum ConflictCode {
+        /// 이메일 가입: 같은 이메일의 이메일 계정이 있어요
+        static let emailTaken = "email_taken"
+        /// 이메일 가입: 같은 이메일의 카카오 계정이 있어요
+        static let kakaoAccountExists = "kakao_account_exists"
+        /// 첫 카카오 로그인: 같은 이메일의 이메일 계정이 있어요
+        static let emailAccountExists = "email_account_exists"
+    }
+
     private struct KakaoLoginRequest: Encodable {
         let access_token: String
+        let allow_duplicate_email: Bool
     }
 
     /// 카카오 SDK로 받은 카카오 토큰을 서버에 보내 우리 토큰으로 바꿔요.
-    static func loginKakao(kakaoAccessToken: String) async throws -> LoginResponse {
+    /// `allowDuplicateEmail` 이면 같은 이메일의 이메일 계정이 있어도 새 카카오 계정을 만들어요.
+    static func loginKakao(kakaoAccessToken: String, allowDuplicateEmail: Bool = false) async throws -> LoginResponse {
         try await APIClient.json("POST", path: "api/v1/auth/kakao",
-                                 body: KakaoLoginRequest(access_token: kakaoAccessToken),
+                                 body: KakaoLoginRequest(access_token: kakaoAccessToken,
+                                                         allow_duplicate_email: allowDuplicateEmail),
                                  as: LoginResponse.self)
+    }
+
+    /// 이메일 가입. 가입하면 바로 로그인한 토큰을 받아요.
+    static func signupEmail(email: String, password: String, name: String) async throws -> LoginResponse {
+        struct Body: Encodable { let email: String; let password: String; let name: String }
+        return try await APIClient.json("POST", path: "api/v1/auth/email/signup",
+                                        body: Body(email: email, password: password, name: name),
+                                        as: LoginResponse.self)
+    }
+
+    /// 이메일 로그인. 없는 이메일과 틀린 비밀번호는 같은 오류 문구로 와요.
+    static func loginEmail(email: String, password: String) async throws -> LoginResponse {
+        struct Body: Encodable { let email: String; let password: String }
+        return try await APIClient.json("POST", path: "api/v1/auth/email/login",
+                                        body: Body(email: email, password: password),
+                                        as: LoginResponse.self)
     }
 
     /// 내 정보. 저장된 토큰이 아직 유효한지 확인할 때 써요.
