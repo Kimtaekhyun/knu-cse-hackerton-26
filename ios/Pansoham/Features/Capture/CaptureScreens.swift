@@ -93,6 +93,10 @@ struct CaptureScreen: View {
                          button: "설정 열기") {
                 if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
             }
+        case .interrupted:
+            cameraNotice(title: "지금은 카메라를 쓸 수 없어요",
+                         detail: "다른 앱과 화면을 나눠 쓰는 중이면 카메라가 꺼질 수 있어요.\n전체 화면으로 돌아오면 다시 켜져요.",
+                         button: "앨범에서 고르기") { showAlbum = true }
         case .unavailable:
             cameraNotice(title: "이 기기에서는 카메라를 쓸 수 없어요",
                          detail: "셔터를 누르면 앨범에서 판서 사진을 고를 수 있어요.",
