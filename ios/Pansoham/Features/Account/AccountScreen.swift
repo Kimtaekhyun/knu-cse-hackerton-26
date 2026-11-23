@@ -71,7 +71,7 @@ struct AccountScreen: View {
                 }
                 .keyboardShortcut(.defaultAction)
             } message: {
-                Text("설정에서 판서함 알림을 켜 주세요.")
+                Text("설정에서 chalkdrop 알림을 켜 주세요.")
             }
             .alert("알림 설정을 저장하지 못했어요", isPresented: Binding(get: { settingsError != nil }, set: { if !$0 { settingsError = nil } })) {
                 Button("확인", role: .cancel) {}

@@ -1,7 +1,7 @@
 [project]
 name = "pansoham-server"
 version = "0.1.0"
-description = "판서함 백엔드 (FastAPI)"
+description = "chalkdrop 백엔드 (FastAPI)"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi",

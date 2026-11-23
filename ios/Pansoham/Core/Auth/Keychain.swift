@@ -1,6 +1,6 @@
 //
 //  Keychain.swift
-//  판서함
+//  chalkdrop
 //
 //  로그인 토큰처럼 기기에만 안전하게 남겨야 하는 글자를 Keychain에 저장 · 읽기 · 삭제해요.
 //  UserDefaults는 암호화되지 않아서 토큰을 두지 않아요.

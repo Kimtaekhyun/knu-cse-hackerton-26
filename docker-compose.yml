@@ -1,4 +1,4 @@
-# 판서함 개발 환경. BE · FE 모두 `docker compose up` 한 줄로 DB와 API 서버를 띄운다.
+# chalkdrop 개발 환경. BE · FE 모두 `docker compose up` 한 줄로 DB와 API 서버를 띄운다.
 # - API 코드(./server)를 컨테이너에 연결해서 저장하면 서버가 자동으로 다시 시작된다
 # - DB 데이터와 업로드 이미지는 볼륨에 남는다 (지우려면 docker compose down -v)
 services:

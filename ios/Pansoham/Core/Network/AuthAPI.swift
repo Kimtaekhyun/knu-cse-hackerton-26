@@ -1,6 +1,6 @@
 //
 //  AuthAPI.swift
-//  판서함
+//  chalkdrop
 //
 //  로그인 (서버 `POST /api/v1/auth/kakao` · `/auth/email/signup` · `/auth/email/login`, `GET /api/v1/me`)
 //
