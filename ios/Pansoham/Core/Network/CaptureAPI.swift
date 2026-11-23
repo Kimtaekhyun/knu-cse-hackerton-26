@@ -135,7 +135,7 @@ enum CaptureAPI {
         var fields = ["id": id.uuidString, "taken_at": formatter.string(from: takenAt)]
         if let subjectId { fields["subject_id"] = subjectId.uuidString }
         // 찍힌 사람은 기기에서 가린 뒤에 올려요 (원본은 서버로 나가지 않아요)
-        let image = await PersonMasking.masked(image)
+        let image = await PersonMasking.masked(image, maxSide: maxSide)
         try Task.checkCancellation()
         return try await APIClient.uploadImage(path: "api/v1/captures", image: image, fields: fields,
                                                maxSide: maxSide, as: CaptureDTO.self)

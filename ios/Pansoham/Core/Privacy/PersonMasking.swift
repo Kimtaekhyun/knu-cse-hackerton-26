@@ -23,19 +23,33 @@ nonisolated enum PersonMasking {
     private static let fillColor = CIColor(red: 0.5, green: 0.5, blue: 0.5)
     private static let context = CIContext()
 
-    /// 사람이 있으면 가린 사진, 없거나 실패하면 원본 그대로.
-    /// 4K 사진이면 수백 ms 걸려서 메인 스레드 밖에서 해요.
-    static func masked(_ image: UIImage) async -> UIImage {
+    /// 사람이 있으면 가린 사진, 없으면 원본(긴 변이 `maxSide` 를 넘으면 줄인 사진), 실패하면 원본 그대로.
+    /// 메인 스레드 밖에서 해요. M5 Mac 기준 4K 한 장에 30 ms 안팎이에요.
+    static func masked(_ image: UIImage, maxSide: CGFloat) async -> UIImage {
         guard isEnabled else { return image }
         return await Task.detached(priority: .userInitiated) {
-            (try? mask(image)) ?? image
+            (try? mask(image, maxSide: maxSide)) ?? image
         }.value
     }
 
-    private static func mask(_ image: UIImage) throws -> UIImage? {
+    private static func mask(_ image: UIImage, maxSide: CGFloat) throws -> UIImage? {
         guard let cgImage = image.cgImage else { return nil }
         // 사진 방향을 먼저 바로 세워서, 마스크와 사진의 좌표가 어긋나지 않게 해요
-        let upright = CIImage(cgImage: cgImage).oriented(CGImagePropertyOrientation(image.imageOrientation))
+        var upright = CIImage(cgImage: cgImage).oriented(CGImagePropertyOrientation(image.imageOrientation))
+
+        // 48MP 같은 큰 앨범 사진은 어차피 업로드 전에 maxSide 로 줄어요. 먼저 줄여서 마스킹하면
+        // 원본 크기로 합성하는 낭비가 없어요. 줄인 사진은 한 번만 렌더링해서 Vision · 합성이 같이 써요
+        // (지연 계산된 채로 두면 두 번 그려서 오히려 느려져요). 글씨가 뭉개지지 않게 Lanczos 로 줄여요.
+        var downscaled: CGImage?
+        let longest = max(upright.extent.width, upright.extent.height)
+        if longest > maxSide {
+            let scaled = upright.applyingFilter("CILanczosScaleTransform", parameters: [
+                kCIInputScaleKey: maxSide / longest, kCIInputAspectRatioKey: 1,
+            ])
+            guard let rendered = context.createCGImage(scaled, from: scaled.extent.integral) else { return nil }
+            downscaled = rendered
+            upright = CIImage(cgImage: rendered)
+        }
         let extent = upright.extent
 
         let request = VNGeneratePersonSegmentationRequest()
@@ -52,8 +66,10 @@ nonisolated enum PersonMasking {
                                                y: extent.height / small.extent.height))
             .transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
 
-        // 사람이 하나도 없으면 다시 그리지 않고 원본을 써요 (화질 손실 · 시간 절약)
-        guard hasPerson(small) else { return nil }
+        // 사람이 하나도 없으면 다시 그리지 않아요. 줄였으면 줄인 사진을 돌려줘서 업로드에서 또 줄이지 않게 해요
+        guard hasPerson(small) else {
+            return downscaled.map { UIImage(cgImage: $0, scale: 1, orientation: .up) }
+        }
 
         let fill = CIImage(color: fillColor).cropped(to: extent)
         let output = fill.applyingFilter("CIBlendWithMask", parameters: [
@@ -61,7 +77,7 @@ nonisolated enum PersonMasking {
             kCIInputMaskImageKey: mask,
         ])
         guard let result = context.createCGImage(output, from: extent) else { return nil }
-        return UIImage(cgImage: result, scale: image.scale, orientation: .up)
+        return UIImage(cgImage: result, scale: downscaled == nil ? image.scale : 1, orientation: .up)
     }
 
     /// 마스크에서 가장 밝은 값이 절반을 넘으면 사람이 있다고 봐요
