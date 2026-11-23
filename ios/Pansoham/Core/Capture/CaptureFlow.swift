@@ -50,6 +50,9 @@ final class CaptureFlow {
     var failed: Job?
     /// 지금 찍으면 저장될 곳 ("자료구조 폴더" · "미분류함")
     var destination: CaptureDestination?
+    /// 이번에 복사 · 끌어다 놓기 한 카드 (결과 "다시 찍기"에서 남기기를 기본으로, #126)
+    var movedCards: Set<UUID> = []
+
     /// 카드 상세(17)에서 고칠 서버 카드 (결과 · 카드 모아 보기에서 눌렀을 때, #99)
     var openedCard: Sticker?
 

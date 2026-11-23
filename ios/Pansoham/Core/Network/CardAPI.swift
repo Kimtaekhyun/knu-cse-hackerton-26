@@ -38,6 +38,7 @@ enum CardAPI {
     static func markMovedQuietly(_ stickers: [Sticker]) {
         let ids = stickers.compactMap(\.cardID)
         guard !ids.isEmpty, AuthSession.shared.isLoggedIn else { return }
+        CaptureFlow.shared.movedCards.formUnion(ids)
         Task { @MainActor in
             guard (try? await markMoved(ids)) != nil else { return }
             await SubjectCaptures.unmoved.load(.unmoved)
