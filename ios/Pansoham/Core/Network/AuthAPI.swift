@@ -39,7 +39,7 @@ enum AuthAPI {
     struct LoginResponse: Decodable {
         /// 이후 요청에 `Authorization: Bearer` 로 붙이는 우리 서버 토큰
         let accessToken: String
-        /// 이번 로그인으로 처음 가입했는지
+        /// 아직 시간표를 등록하지 않았는지 (어느 학기에도 과목이 없음, #150). true면 시간표 등록으로 보내요
         let isNewUser: Bool
         let user: UserDTO
 

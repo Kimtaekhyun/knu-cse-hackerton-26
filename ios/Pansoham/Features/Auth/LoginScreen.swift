@@ -95,13 +95,14 @@ struct LoginScreen: View {
     /// 이메일로 계속하기: 로그인 · 회원가입 창을 열어요.
     private func openEmail() { emailSheet = EmailSheet() }
 
-    /// 로그인이 끝나면 처음 가입이면 시간표 등록, 아니면 홈
+    /// 로그인이 끝나면 아직 시간표를 등록하지 않은 사용자는 시간표 등록, 아니면 홈.
+    /// `isNewUser` 는 서버가 정해요 (어느 학기에도 과목이 없으면 true, #150).
     private func finish(isNewUser: Bool) {
         router.timetableEditing = false
         router.reset(to: isNewUser ? .timetableUpload : .home)
     }
 
-    /// 카카오 로그인 → 서버 토큰 저장 → 처음 가입이면 시간표 등록, 아니면 홈
+    /// 카카오 로그인 → 서버 토큰 저장 → 시간표가 없으면 시간표 등록, 아니면 홈
     private func loginWithKakao() {
         runKakao { try await AuthSession.shared.loginWithKakao() }
     }

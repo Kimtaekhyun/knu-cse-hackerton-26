@@ -71,6 +71,9 @@ class LoginResponse(BaseModel):
     access_token: str = Field(description="이후 요청에 Authorization: Bearer로 붙이는 우리 토큰")
     token_type: Literal["bearer"] = "bearer"
     is_new_user: bool = Field(
-        description="이번 로그인으로 처음 가입했는지 (앱이 첫 화면을 고를 때)"
+        description=(
+            "아직 시간표를 등록하지 않았는지 (어느 학기에도 과목이 없음). "
+            "true면 앱이 시간표 등록으로, false면 홈으로 보낸다"
+        )
     )
     user: UserOut

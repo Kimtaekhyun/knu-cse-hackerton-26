@@ -6,7 +6,8 @@
 //  피그마 화면이 없어서 과목 추가 창(SubjectEditorSheet)처럼 기본 폼으로 만들었어요.
 //  입력 검사는 서버 규칙과 같아요 (이메일 형식 · 비밀번호 8~64자 · 이름 1~50자).
 //  가입하면 바로 로그인하지 않고 "회원가입 완료"를 띄운 뒤 로그인 탭으로 바꿔요 (이메일은 채운 채로).
-//  가입 직후 그 이메일로 처음 로그인하면 시간표 등록(05)으로 가요.
+//  로그인한 뒤 시간표 등록(05)으로 갈지는 서버가 정해요: 아직 시간표를 등록하지 않았으면 시간표 등록 (#150).
+//  창을 닫았다가 나중에 로그인해도 같아요.
 //
 
 import SwiftUI
@@ -17,7 +18,7 @@ struct EmailLoginSheet: View {
         case signup = "회원가입"
     }
 
-    /// 로그인 · 가입이 끝났어요. 처음 가입이면 true
+    /// 로그인이 끝났어요. 아직 시간표를 등록하지 않은 사용자면 true
     let onDone: (_ isNewUser: Bool) -> Void
     /// "카카오로 가입한 이메일이에요" 안내에서 카카오로 로그인을 골랐어요
     let onKakao: () -> Void
@@ -34,8 +35,6 @@ struct EmailLoginSheet: View {
     @State private var kakaoNotice: String?
     /// "회원가입 완료" 안내
     @State private var signedUp = false
-    /// 이 창에서 방금 가입한 이메일. 이 이메일로 로그인하면 처음 쓰는 사용자로 보고 시간표 등록으로 보내요.
-    @State private var signedUpEmail: String?
     @FocusState private var passwordFocused: Bool
 
     init(mode: Mode = .login, email: String = "",
@@ -163,8 +162,7 @@ struct EmailLoginSheet: View {
             do {
                 switch mode {
                 case .login:
-                    try await AuthSession.shared.loginWithEmail(email: trimmedEmail, password: password)
-                    onDone(signedUpEmail == trimmedEmail.lowercased())
+                    onDone(try await AuthSession.shared.loginWithEmail(email: trimmedEmail, password: password))
                 case .signup:
                     try await AuthSession.shared.signupWithEmail(email: trimmedEmail, password: password,
                                                                  name: trimmedName)
@@ -180,7 +178,6 @@ struct EmailLoginSheet: View {
 
     /// 가입이 끝나면 로그인 탭으로 바꾸고 이메일만 남겨요. 비밀번호는 다시 입력해요.
     private func showLogin() {
-        signedUpEmail = trimmedEmail.lowercased()
         mode = .login
         password = ""
         passwordAgain = ""

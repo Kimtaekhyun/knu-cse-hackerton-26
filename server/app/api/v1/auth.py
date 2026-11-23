@@ -48,10 +48,13 @@ def _require_jwt_secret() -> None:
         raise HTTPException(503, "서버에 로그인 설정이 없어요.")
 
 
-def _login_response(user: User, is_new: bool) -> LoginResponse:
+def _login_response(db: Session, user: User) -> LoginResponse:
+    """로그인 응답. is_new_user는 아직 시간표를 등록하지 않았는지다
+    (가입 · 이메일 로그인 · 카카오 로그인 모두 같은 기준, #150).
+    True면 앱이 시간표 등록(05)으로, False면 홈으로 보낸다."""
     return LoginResponse(
         access_token=create_access_token(user.id),
-        is_new_user=is_new,
+        is_new_user=auth_service.needs_timetable(db, user),
         user=UserOut.model_validate(user),
     )
 
@@ -88,12 +91,12 @@ def login_kakao(
         message = "카카오 서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요."
         raise HTTPException(502, message) from error
     try:
-        user, is_new = auth_service.login_kakao(db, profile, body.allow_duplicate_email)
+        user = auth_service.login_kakao(db, profile, body.allow_duplicate_email)
     except auth_service.EmailAccountExists as error:
         # 이메일은 카카오가 확인한 본인 것이다. 앱이 이메일 로그인 칸을 미리 채운다
         message = "이 이메일로 가입한 계정이 있어요."
         raise _conflict("email_account_exists", message, email=error.email) from error
-    return _login_response(user, is_new)
+    return _login_response(db, user)
 
 
 @router.post("/auth/email/signup", response_model=LoginResponse, status_code=201)
@@ -107,7 +110,7 @@ def signup_email(body: EmailSignupRequest, db: DbDep):
         user = auth_service.signup_email(db, body)
     except auth_service.EmailTaken as error:
         raise _conflict(*EMAIL_TAKEN[error.provider]) from error
-    return _login_response(user, True)
+    return _login_response(db, user)
 
 
 @router.post("/auth/email/login", response_model=LoginResponse)
@@ -117,4 +120,4 @@ def login_email(body: EmailLoginRequest, db: DbDep):
     user = auth_service.login_email(db, body.email, body.password)
     if user is None:
         raise HTTPException(401, WRONG_LOGIN)
-    return _login_response(user, False)
+    return _login_response(db, user)

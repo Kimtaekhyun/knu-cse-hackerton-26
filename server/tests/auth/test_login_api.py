@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 
 from app.core.security import create_access_token
 from app.models import AuthProvider, User
-from tests.db.factories import make_user
+from tests.db.factories import make_semester, make_subject, make_user
 
 LOGIN = "/api/v1/auth/kakao"
 ME = "/api/v1/me"
@@ -45,7 +45,6 @@ def test_login_response_includes_settings(client):
 def test_second_login_reuses_user(client, db):
     first = login(client).json()
     second = login(client).json()
-    assert second["is_new_user"] is False
     assert second["user"]["id"] == first["user"]["id"]
     count = db.scalar(select(func.count()).select_from(User).where(User.provider_uid == "3001"))
     assert count == 1
@@ -172,3 +171,18 @@ def test_me_for_deleted_user_is_401(client, db):
     db.delete(user)
     db.flush()
     assert client.get(ME, headers=bearer(token)).status_code == 401
+
+
+def test_existing_user_without_timetable_is_new_user(client, db):
+    # 가입한 뒤 시간표 등록 전에 앱을 껐다가 다시 로그인한 경우 (#150)
+    make_user(db, provider=AuthProvider.kakao, provider_uid="3001", email="user@example.com")
+    body = login(client).json()
+    assert body["is_new_user"] is True
+    count = db.scalar(select(func.count()).select_from(User).where(User.provider_uid == "3001"))
+    assert count == 1
+
+
+def test_existing_user_with_timetable_is_not_new_user(client, db):
+    user = make_user(db, provider=AuthProvider.kakao, provider_uid="3001")
+    make_subject(db, make_semester(db, user))
+    assert login(client).json()["is_new_user"] is False

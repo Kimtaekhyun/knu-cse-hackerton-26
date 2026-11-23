@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.models import AuthProvider, User
-from tests.db.factories import make_user
+from tests.db.factories import make_semester, make_subject, make_user
 
 SIGNUP = "/api/v1/auth/email/signup"
 LOGIN = "/api/v1/auth/email/login"
@@ -116,9 +116,42 @@ def test_login_returns_same_user(client):
     created = signup(client).json()
     response = login(client)
     assert response.status_code == 200
-    body = response.json()
-    assert body["is_new_user"] is False
-    assert body["user"]["id"] == created["user"]["id"]
+    assert response.json()["user"]["id"] == created["user"]["id"]
+
+
+def test_login_before_timetable_is_new_user(client, db):
+    # 가입 후 창(앱)을 닫았다가 다시 로그인해도 시간표 등록으로 가야 한다 (#150)
+    signup(client)
+    assert login(client).json()["is_new_user"] is True
+    assert login(client).json()["is_new_user"] is True
+
+
+def test_login_with_semester_but_no_subjects_is_new_user(client, db):
+    # "나중에 할게요" 뒤 판서를 찍으면 학기만 저절로 생긴다. 과목이 없으니 아직 시간표 전이다
+    user_id = uuid.UUID(signup(client).json()["user"]["id"])
+    make_semester(db, db.get(User, user_id))
+    assert login(client).json()["is_new_user"] is True
+
+
+def test_login_after_timetable_is_not_new_user(client, db):
+    user_id = uuid.UUID(signup(client).json()["user"]["id"])
+    make_subject(db, make_semester(db, db.get(User, user_id)))
+    assert login(client).json()["is_new_user"] is False
+
+
+def test_timetable_in_past_semester_counts(client, db):
+    user_id = uuid.UUID(signup(client).json()["user"]["id"])
+    user = db.get(User, user_id)
+    make_subject(db, make_semester(db, user, year=2025, is_current=False))
+    make_semester(db, user)  # 새 학기는 아직 비어 있다
+    assert login(client).json()["is_new_user"] is False
+
+
+def test_other_users_timetable_does_not_count(client, db):
+    other = make_user(db)
+    make_subject(db, make_semester(db, other))
+    signup(client)
+    assert login(client).json()["is_new_user"] is True
 
 
 def test_login_email_is_case_insensitive(client):
