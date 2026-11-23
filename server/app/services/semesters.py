@@ -278,6 +278,17 @@ def _capture_counts(db: Session, column, ids: list[uuid.UUID]) -> dict[uuid.UUID
     return dict(rows)
 
 
+def _semester_capture_counts(db: Session, ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """학기 과목 폴더에 든 판서 수. 미분류는 빼고 과목의 학기로 센다 (#171)"""
+    rows = db.execute(
+        select(Subject.semester_id, func.count())
+        .join(Capture, Capture.subject_id == Subject.id)
+        .where(Subject.semester_id.in_(ids), Capture.status == CaptureStatus.done)
+        .group_by(Subject.semester_id)
+    ).all()
+    return dict(rows)
+
+
 def _slot_key(slot: SubjectSlot):
     return (slot.weekday, slot.start_time)
 
@@ -312,7 +323,7 @@ def subject_outs(db: Session, subjects: list[Subject]) -> list[SubjectOut]:
 def semester_outs(db: Session, semesters: list[Semester]) -> list[SemesterOut]:
     ids = [s.id for s in semesters]
     subject_counts = _subject_counts(db, ids)
-    capture_counts = _capture_counts(db, Capture.semester_id, ids)
+    capture_counts = _semester_capture_counts(db, ids)
     return [
         SemesterOut(
             id=s.id,
