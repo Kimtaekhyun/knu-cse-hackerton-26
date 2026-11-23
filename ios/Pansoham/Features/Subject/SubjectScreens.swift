@@ -897,7 +897,7 @@ extension Router {
     func subjectHint(_ sample: String) -> String {
         guard let subject else { return sample }
         guard let slot = subject.slots.min(by: { ($0.weekday, $0.start) < ($1.weekday, $1.start) }) else {
-            return "시간이 없는 과목이라 미분류함에서 옮겨 와요"
+            return "여기서 찍거나 미분류함에서 옮겨 와요"
         }
         let day = Slot.days.indices.contains(slot.weekday) ? Slot.days[slot.weekday] : "?"
         return "\(day)요일 \(slot.start) 수업 시간에 찍으면 여기로 모여요"
