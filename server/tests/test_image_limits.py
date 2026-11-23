@@ -9,10 +9,14 @@ from app.services import image_limits
 from app.services.image_limits import TooManyPixels, UnreadableImage, check_pixels
 
 
-def png(width: int, height: int) -> bytes:
+def encoded(width: int, height: int, fmt: str) -> bytes:
     buffer = io.BytesIO()
-    Image.new("RGB", (width, height), "white").save(buffer, "PNG")
+    Image.new("RGB", (width, height), "white").save(buffer, fmt)
     return buffer.getvalue()
+
+
+def png(width: int, height: int) -> bytes:
+    return encoded(width, height, "PNG")
 
 
 @pytest.fixture
@@ -46,3 +50,15 @@ def test_default_limit_allows_app_photos():
     # 앱이 보내는 가장 큰 사진(긴 변 4096 정사각형)과 4K 카메라 프레임은 통과해야 한다
     assert 4096 * 4096 <= image_limits.MAX_PIXELS
     assert 3840 * 2160 <= image_limits.MAX_PIXELS
+
+
+@pytest.mark.parametrize("fmt", ["JPEG", "PNG", "WEBP"])
+def test_upload_formats_are_read(fmt):
+    assert check_pixels(encoded(8, 6, fmt)) == (8, 6)
+
+
+@pytest.mark.parametrize("fmt", ["BMP", "GIF", "TIFF"])
+def test_other_formats_are_unreadable(fmt):
+    # 앱이 보낸 형식 이름(content_type)만 믿지 않고, 받는 세 형식(JPEG · PNG · WEBP)만 연다
+    with pytest.raises(UnreadableImage):
+        check_pixels(encoded(8, 6, fmt))
