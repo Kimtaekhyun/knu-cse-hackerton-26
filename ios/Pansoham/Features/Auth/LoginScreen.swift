@@ -97,6 +97,7 @@ struct LoginScreen: View {
 
     /// 로그인이 끝나면 처음 가입이면 시간표 등록, 아니면 홈
     private func finish(isNewUser: Bool) {
+        router.timetableEditing = false
         router.reset(to: isNewUser ? .timetableUpload : .home)
     }
 

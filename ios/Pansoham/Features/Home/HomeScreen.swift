@@ -385,7 +385,7 @@ struct HomeScreen: View {
         }
         guard store.current != nil else {
             return [Folder(name: "시간표 등록", detail: "에브리타임 시간표 올리기", count: 0, style: .dashed, symbol: "+") {
-                router.push(.timetableUpload)
+                router.startNewSemester()
             }, unsorted]
         }
         return store.subjects.enumerated().map { index, subject in

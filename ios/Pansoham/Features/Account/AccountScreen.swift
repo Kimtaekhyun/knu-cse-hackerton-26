@@ -221,11 +221,8 @@ struct AccountScreen: View {
                 row("현재 학기", value: SemesterStore.shared.current?.label ?? (SemesterStore.shared.isLive ? "없음" : "2026년 2학기"), chevron: true) { router.push(.allSemesters) }
                 divider
                 row("시간표 수정", chevron: true) {
-                    // 새 사진 없이 열면 06 이 서버의 현재 학기 과목을 불러와요.
-                    router.timetableImage = nil
-                    router.timetableManual = false
-                    router.semester = nil
-                    router.push(.timetableConfirm)
+                    // 06 이 서버의 현재 학기 과목을 불러와요. 학기는 고정 (#146)
+                    router.startTimetableEdit()
                 }
             }
             group("알림", width) {

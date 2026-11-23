@@ -48,4 +48,14 @@ struct Semester: Hashable {
         let index: [Term: Int] = [.first: 0, .summer: 1, .second: 2, .winter: 3]
         return year * 4 + (index[term] ?? 0)
     }
+
+    /// 다음 학기 (1학기 → 여름 → 2학기 → 겨울 → 다음 해 1학기)
+    var next: Semester {
+        switch term {
+        case .first: Semester(year: year, term: .summer)
+        case .summer: Semester(year: year, term: .second)
+        case .second: Semester(year: year, term: .winter)
+        case .winter: Semester(year: year + 1, term: .first)
+        }
+    }
 }
