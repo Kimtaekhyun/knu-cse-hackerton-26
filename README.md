@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="ios/Pansoham/Assets.xcassets/app-logo.imageset/app-logo.png" width="72" alt="판서함 로고">
+  <img src="ios/Pansoham/Assets.xcassets/app-logo.imageset/app-logo.png" width="72" alt="chalkdrop 로고">
 </p>
 
-# 판서함
+# chalkdrop
 
-**찍는 건 수업 중에, 정리는 판서함이.**
+**찍고, 끌어서, 노트에 놓으세요.**
 수업 중에 찍은 판서 사진을 시간표에 맞춰 과목별로 나누고, AI로 글자 · 수식 · 코드 카드로 바꿔 주는 iPad 앱입니다.
 2026 경북대학교 컴퓨터학부 해커톤(주제: 컴퓨터학부 학생에게 필요한 서비스) 출품작입니다.
 
@@ -18,14 +18,14 @@
 ![Claude](https://img.shields.io/badge/Claude-Haiku_%2F_Opus_5.5-D97757?logo=anthropic&logoColor=white)
 ![Docker Compose](https://img.shields.io/badge/Docker_Compose-dev-2496ED?logo=docker&logoColor=white)
 
-| API 문서 (로컬) | 발표자료 | 시연 영상 |
-| --- | --- | --- |
-| http://localhost:8000/docs | (링크 추가) | (링크 추가) |
+| API 문서 (로컬) |
+| --- |
+| http://localhost:8000/docs |
 
 ## 무엇을 해결하나요
 
 - 컴퓨터학부 수업은 수식 · 코드 · 도식이 칠판에 빠르게 지나갑니다. 사진으로 찍어 두지만 사진첩에 다른 사진과 섞이고, 어느 과목 몇 주차 판서인지 나중에 찾기 어렵습니다.
-- 판서함은 시간표를 한 번 등록해 두면 찍은 시각으로 과목을 정해 폴더에 넣고, 사진 속 판서를 글자 · 수식(LaTeX) · 코드 카드로 바꿔 필기 앱에 바로 붙여 넣을 수 있게 합니다.
+- chalkdrop은 시간표를 한 번 등록해 두면 찍은 시각으로 과목을 정해 폴더에 넣고, 사진 속 판서를 글자 · 수식(LaTeX) · 코드 카드로 바꿔 필기 앱에 바로 붙여 넣을 수 있게 합니다.
 - 사진에 찍힌 사람(교수님 · 앞줄 학생)은 올리기 전에 iPad 안에서 가립니다. 사람이 보이는 원본은 서버와 AI로 나가지 않습니다.
 
 ## 주요 기능
@@ -65,14 +65,6 @@ flowchart LR
 
 판서 처리는 서버 뒤에서 한 장씩 돌고, 단계마다 상태(`uploaded → rectifying → segmenting → interpreting → done`)를 저장해서 앱이 지금 단계를 보여 줍니다. 서버가 처리 중에 꺼져도 다시 켜면 멈춘 판서를 이어서 처리합니다.
 
-## 화면
-
-| 메인 화면 | 과목 폴더 |
-| --- | --- |
-| (스크린샷) | (스크린샷) |
-| **판서 처리 중** | **카드 상세 · 수식** |
-| (스크린샷) | (스크린샷) |
-
 ## 시스템 구조
 
 개발 환경은 `docker compose` 로 API 서버와 PostgreSQL 두 컨테이너를 띄웁니다. iPad 앱은 REST API로 서버와 통신하고, 서버는 판서 · 시간표 인식과 학사일정 찾기에만 외부 AI를 부릅니다. 찾은 학사일정은 DB에 저장해 같은 학교 사용자가 함께 씁니다.
@@ -80,7 +72,7 @@ flowchart LR
 ```mermaid
 flowchart LR
   subgraph client[iPad 앱 · SwiftUI]
-    APP[판서함]
+    APP[chalkdrop]
     VIS[Apple Vision<br/>사람 가리기]
     NOTI[로컬 알림]
   end
@@ -212,19 +204,14 @@ open ios/Pansoham.xcodeproj                                      # iPad 시뮬�
 | `lint` | ruff check · ruff format --check |
 | `server-test` | Postgres 17 서비스를 띄우고 `uv sync` → `pytest` (`REQUIRE_DB=1` 이라 DB 테스트를 건너뛰지 않음) |
 
-## 문서
-
-| 문서 | 내용 |
-| --- | --- |
-| [`ios/FIGMA_REVIEW.md`](ios/FIGMA_REVIEW.md) | 피그마 디자인 검토 |
-| [`.env.example`](.env.example) | 서버 환경변수 전체 목록 |
-| http://localhost:8000/docs | API 문서 (서버를 띄운 뒤) |
-
 ## 팀
 
 2026 경북대학교 컴퓨터학부 해커톤
 
-| 역할 | 이름 |
-| --- | --- |
-| iOS | (이름) |
-| BE · AI | (이름) |
+| 이름 | 맡은 부분 | 대표 작업 |
+| --- | --- | --- |
+| 김강민 | 서버 · 협업 환경 (BE) | 판서 API · 처리 워커, AI 전환, CI · 협업 규칙 |
+| 김택현 | 서버 · 데이터 (BE) | DB 설계, 시간표 인식, 로그인, 카드 · 메인 API |
+| 박성해 | 파이프라인 · iOS (FE) | 첫 판서 파이프라인, 화면 · API 연결, 알림 · 카메라 |
+| 배한결 | iOS 화면 (FE) | 앱 초기 세팅, 화면 · 애니메이션, 시간표 입력, 촬영 |
+| 이민석 | AI 정확도 · 보안 (BE) | 숫자 정렬 블록 추출, 확인 필요 표시, 보안 점검 |
