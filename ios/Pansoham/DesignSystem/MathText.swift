@@ -114,7 +114,7 @@ enum MathLine {
         for (index, block) in blocks.enumerated() {
             if index % 2 == 1 && index < blocks.count - 1 {
                 let latex = block.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
-                if !latex.isEmpty { lines[lines.count - 1] += splitAtRelations(latex).map(Token.math) }
+                if !latex.isEmpty { lines[lines.count - 1] += mathTokens(latex) }
                 continue
             }
             // 짝이 맞지 않는 마지막 $$ 는 글자로
@@ -138,13 +138,51 @@ enum MathLine {
             if isMath {
                 let latex = part.trimmingCharacters(in: .whitespaces)
                 guard !latex.isEmpty else { continue }
-                tokens += splitAtRelations(latex).map(Token.math)
+                tokens += mathTokens(latex)
             } else {
                 let text = (index % 2 == 1) ? "$" + part : part
                 tokens += text.split(separator: " ").map { .word(String($0)) }
             }
         }
         return tokens
+    }
+
+    /// 수식 하나를 그릴 조각으로 바꿔요. SwiftMath에 없는 명령은 먼저 바꿔요.
+    /// - \tfrac · \dfrac → \frac
+    /// - \textcircled{3} → 수식 밖 글자 ③ (수학 글꼴에 동그라미 숫자가 없어서)
+    static func mathTokens(_ latex: String) -> [Token] {
+        let source = latex.replacingOccurrences(
+            of: #"\\[td]frac(?![a-zA-Z])"#, with: "\\\\frac", options: .regularExpression)
+        let circled = try! NSRegularExpression(pattern: #"\\textcircled\s*\{([^{}]*)\}"#)
+        let ns = source as NSString
+        var tokens: [Token] = []
+        var start = 0
+
+        func appendMath(_ piece: String) {
+            // 동그라미 숫자를 뺀 뒤 앞에 남는 \ · \, · \quad 같은 빈칸은 버려요
+            let rest = piece.replacingOccurrences(
+                of: #"^(\s|\\ |\\,|\\;|\\quad|\\qquad)+"#, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            if !rest.isEmpty { tokens += splitAtRelations(rest).map(Token.math) }
+        }
+
+        for match in circled.matches(in: source, range: NSRange(location: 0, length: ns.length)) {
+            appendMath(ns.substring(with: NSRange(location: start, length: match.range.location - start)))
+            tokens.append(.word(circledLabel(ns.substring(with: match.range(at: 1)))))
+            start = match.range.location + match.range.length
+        }
+        appendMath(ns.substring(from: start))
+        return tokens
+    }
+
+    /// 0~20 은 ⓪①…⑳, 그 밖은 (글자)
+    static func circledLabel(_ raw: String) -> String {
+        let label = raw.trimmingCharacters(in: .whitespaces)
+        if let n = Int(label) {
+            if n == 0 { return "⓪" }
+            if (1...20).contains(n), let scalar = Unicode.Scalar(0x2460 + n - 1) { return String(scalar) }
+        }
+        return "(\(label))"
     }
 
     /// 중괄호 · \left…\right · \begin…\end 밖에 있는 = · + 앞에서 수식을 잘라요.
@@ -275,6 +313,7 @@ struct FlowRow: Layout {
     = $f_{xx}h^2 + 2f_{xy}hk + f_{yy}k^2$
     = $f_{xx}\\left(h + \\frac{f_{xy}}{f_{xx}}k\\right)^2 + \\frac{k^2}{f_{xx}}(f_{xx}f_{yy} - f_{xy}^2)$
     로피탈 적용 $\\lim_{x\\to\\infty}$ 틀린 수식 $\\frac{a$
+    $\\textcircled{3}\\ x=3: \\sum_{n=0}^{\\infty} \\tfrac{1}{\\sqrt{n}} : D\\ (p=\\dfrac{1}{2}\\text{-series})$
     """)
     .frame(width: 500)
     .padding()
