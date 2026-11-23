@@ -5,7 +5,10 @@
 2. 그동안(또는 찾지 못하면) 추정 개강일로 만든 학사일정을 쓴다 (exam_schedule.estimated_calendar)
 
 - Gemini 키는 구글 검색 할당량이 없어(429) Claude 웹 검색을 쓴다
-- 찾은 날짜는 check()로 말이 되는지 확인하고, 비었거나 하나라도 어긋나면 버린다
+- 찾은 날짜는 usable()로 확인한다. 개강일이 맞으면 저장하고,
+  범위를 벗어난 시험 시작일은 그 칸만 비운다. 빈 칸은 실제 개강일 기준 8 · 15주차로 채워진다
+- 시험 시작일이 빈 학사일정은 RETRY_AFTER초마다 다시 찾아 빈 칸만 채운다
+  (학교가 시험 일정을 늦게 올리는 경우)
 - 같은 학교 · 학기는 찾는 중이면 다시 찾지 않고, 못 찾았으면 RETRY_AFTER초 동안 다시 찾지 않는다
 - 저장한 학사일정은 같은 학교 사용자가 함께 쓴다 (school, year, term 유일)
 """
@@ -18,7 +21,7 @@ from datetime import date
 
 import anthropic
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -36,7 +39,7 @@ START_MONTHS = {SemesterTerm.first: range(2, 5), SemesterTerm.second: range(8, 1
 # 시험 시작일이 들어가야 하는 주차 (개강일이 든 주가 1주차)
 MIDTERM_WEEKS = range(5, 11)
 FINAL_WEEKS = range(12, 19)
-# 못 찾은 학교 · 학기를 다시 찾기까지 기다리는 초 (학교가 학사일정을 늦게 올리는 경우)
+# 못 찾았거나 시험 시작일이 빈 학교 · 학기를 다시 찾기까지 기다리는 초
 RETRY_AFTER = 24 * 60 * 60
 # 요청 한 번에 웹 검색을 몇 번까지 하게 할지 (검색 1번에 요금이 붙는다)
 MAX_SEARCHES = 3
@@ -85,6 +88,8 @@ def calendar_for(db: Session, user: User) -> AcademicCalendar | None:
     if user.school:
         saved = saved_calendar(db, user.school, semester.year, semester.term)
         if saved is not None:
+            if not complete(saved):  # 시험 시작일이 비었으면 다시 찾아 채운다 (하루 한 번까지)
+                request_lookup(user.school, semester.year, semester.term)
             return saved
         request_lookup(user.school, semester.year, semester.term)
     return exam_schedule.estimated_calendar(user.school or "", semester.year, semester.term)
@@ -98,18 +103,29 @@ def week_of(start: date, day: date) -> int:
     return (day - start).days // 7 + 1
 
 
-def check(found: FoundDates, year: int, term: SemesterTerm) -> bool:
-    """말이 되는 날짜인지. 세 날짜가 모두 있어야 한다.
+def usable(found: FoundDates, year: int, term: SemesterTerm) -> FoundDates | None:
+    """저장해도 되는 날짜. 개강일이 없거나 그 학기 달이 아니면 None.
 
-    한 칸이라도 비면 저장하지 않는다. 저장한 학사일정은 다시 찾지 않아서, 비어 있는 채로 저장하면
-    학교가 나중에 시험 일정을 올려도 반영되지 않는다. 대신 RETRY_AFTER초 뒤에 다시 찾는다.
+    시험 시작일이 주차 범위(중간 5~10주차 · 기말 12~18주차)를 벗어나면 그 칸만 비운다.
     """
-    start, midterm, final = found.starts_on, found.midterm_start, found.final_start
-    if start is None or midterm is None or final is None:
-        return False
-    if start.year != year or start.month not in START_MONTHS.get(term, ()):
-        return False
-    return week_of(start, midterm) in MIDTERM_WEEKS and week_of(start, final) in FINAL_WEEKS
+    start = found.starts_on
+    if start is None or start.year != year or start.month not in START_MONTHS.get(term, ()):
+        return None
+
+    def within(day: date | None, weeks: range) -> date | None:
+        return day if day is not None and week_of(start, day) in weeks else None
+
+    return found.model_copy(
+        update={
+            "midterm_start": within(found.midterm_start, MIDTERM_WEEKS),
+            "final_start": within(found.final_start, FINAL_WEEKS),
+        }
+    )
+
+
+def complete(calendar: AcademicCalendar | FoundDates) -> bool:
+    """시험 시작일까지 모두 있는지 (없으면 나중에 다시 찾는다)"""
+    return calendar.midterm_start is not None and calendar.final_start is not None
 
 
 # ---------- Claude 웹 검색 ----------
@@ -139,18 +155,26 @@ def search(school: str, year: int, term: SemesterTerm) -> FoundDates | None:
 
 
 def save(db: Session, school: str, year: int, term: SemesterTerm, found: FoundDates) -> None:
-    """찾은 학사일정을 저장한다. 그 사이 다른 요청이 먼저 저장했으면 그대로 둔다"""
+    """찾은 학사일정을 저장한다. 이미 있으면 비어 있던 시험 시작일만 채운다 (있는 날짜는 그대로)"""
+    statement = insert(AcademicCalendar).values(
+        school=school,
+        year=year,
+        term=term,
+        starts_on=found.starts_on,
+        midterm_start=found.midterm_start,
+        final_start=found.final_start,
+    )
+    table = AcademicCalendar.__table__.c
     db.execute(
-        insert(AcademicCalendar)
-        .values(
-            school=school,
-            year=year,
-            term=term,
-            starts_on=found.starts_on,
-            midterm_start=found.midterm_start,
-            final_start=found.final_start,
+        statement.on_conflict_do_update(
+            index_elements=["school", "year", "term"],
+            set_={
+                "midterm_start": func.coalesce(
+                    table.midterm_start, statement.excluded.midterm_start
+                ),
+                "final_start": func.coalesce(table.final_start, statement.excluded.final_start),
+            },
         )
-        .on_conflict_do_nothing(index_elements=["school", "year", "term"])
     )
     db.commit()
 
@@ -179,18 +203,23 @@ def request_lookup(school: str, year: int, term: SemesterTerm) -> None:
 
 
 def lookup(key: Key, session_factory=SessionLocal) -> bool:
-    """찾아서 확인하고 저장한다. 저장했으면 True. 못 찾으면 RETRY_AFTER초 동안 다시 찾지 않는다"""
+    """찾아서 확인하고 저장한다. 세 날짜를 모두 저장했으면 True.
+
+    개강일만 찾았으면 저장은 하되 False (RETRY_AFTER초 뒤 다시 찾아 시험 시작일을 채운다).
+    못 찾았으면 RETRY_AFTER초 동안 다시 찾지 않는다.
+    """
     school, year, term = key
     try:
         found = search(school, year, term)
-        if found is None or not check(found, year, term):
+        dates = usable(found, year, term) if found is not None else None
+        if dates is None:
             logger.info("학사일정 못 찾음: %s %s %s → 추정 개강일 사용 (%s)", *key, found)
             ok = False
         else:
             with session_factory() as db:
-                save(db, school, year, term, found)
-            logger.info("학사일정 저장: %s %s %s %s", *key, found)
-            ok = True
+                save(db, school, year, term, dates)
+            logger.info("학사일정 저장: %s %s %s %s", *key, dates)
+            ok = complete(dates)
     except (claude.ClaudeError, anthropic.AnthropicError, ValueError) as error:
         logger.warning("학사일정 검색 실패: %s %s %s (%s)", *key, error)
         ok = False

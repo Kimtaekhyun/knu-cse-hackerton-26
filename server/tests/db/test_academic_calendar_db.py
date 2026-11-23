@@ -31,7 +31,38 @@ def test_saved_calendar_is_used(db, monkeypatch):
     )
 
 
-def test_second_save_keeps_first(db):
+def test_second_save_fills_only_missing_dates(db):
+    service.save(db, "부산대학교", 2026, SECOND, dates(midterm=None))
+    service.save(db, "부산대학교", 2026, SECOND, dates(midterm=date(2026, 10, 26)))
+    calendar = service.saved_calendar(db, "부산대학교", 2026, SECOND)
+    assert (calendar.midterm_start, calendar.final_start) == (
+        date(2026, 10, 26),
+        date(2026, 12, 15),
+    )
+
+
+def test_incomplete_saved_calendar_is_used_and_searched_again(db, monkeypatch):
+    requested: list = []
+    monkeypatch.setattr(service, "request_lookup", lambda *key: requested.append(key))
+    service.save(db, "부산대학교", 2026, SECOND, dates(midterm=None))
+    user = make_user(db, school="부산대학교")
+    make_semester(db, user)
+    calendar = service.calendar_for(db, user)
+    assert (calendar.starts_on, calendar.midterm_start) == (date(2026, 9, 1), None)
+    assert requested == [("부산대학교", 2026, SECOND)]
+
+
+def test_complete_saved_calendar_is_not_searched(db, monkeypatch):
+    requested: list = []
+    monkeypatch.setattr(service, "request_lookup", lambda *key: requested.append(key))
+    service.save(db, "부산대학교", 2026, SECOND, dates())
+    user = make_user(db, school="부산대학교")
+    make_semester(db, user)
+    service.calendar_for(db, user)
+    assert requested == []
+
+
+def test_second_save_keeps_existing_dates(db):
     service.save(db, "부산대학교", 2026, SECOND, dates())
     service.save(db, "부산대학교", 2026, SECOND, dates(midterm=date(2026, 10, 26)))
     calendar = service.saved_calendar(db, "부산대학교", 2026, SECOND)

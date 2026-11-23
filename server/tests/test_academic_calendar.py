@@ -10,7 +10,7 @@ import pytest
 
 from app.models import SemesterTerm
 from app.services import academic_calendar as service
-from app.services.academic_calendar import FoundDates, check
+from app.services.academic_calendar import FoundDates, complete, usable
 
 SECOND = SemesterTerm.second
 KEY = ("부산대학교", 2026, SECOND)
@@ -23,15 +23,10 @@ def found(start=date(2026, 9, 1), midterm=date(2026, 10, 19), final=date(2026, 1
 # ---------- 날짜 확인 ----------
 
 
-def test_real_calendar_passes():
+def test_real_calendar_is_used_as_is():
     # 부산대 2026년 2학기 (검색 결과 그대로): 중간 8주차 · 기말 16주차
-    assert check(found(), 2026, SECOND)
-
-
-@pytest.mark.parametrize("dates", [found(midterm=None), found(final=None)])
-def test_missing_exam_date_fails(dates):
-    # 비어 있는 채로 저장하면 다시 찾지 않으므로 저장하지 않는다 (하루 뒤 다시 찾음)
-    assert not check(dates, 2026, SECOND)
+    assert usable(found(), 2026, SECOND) == found()
+    assert complete(found())
 
 
 @pytest.mark.parametrize(
@@ -40,20 +35,36 @@ def test_missing_exam_date_fails(dates):
         found(start=None),  # 개강일은 꼭 있어야 함
         found(start=date(2025, 9, 1)),  # 다른 해
         found(start=date(2026, 3, 2)),  # 2학기인데 3월 개강
-        found(midterm=date(2026, 9, 22)),  # 4주차 중간고사
-        found(midterm=date(2026, 11, 10)),  # 11주차 중간고사
-        found(final=date(2026, 11, 10)),  # 11주차 기말 (12주차보다 이름)
-        found(final=date(2027, 1, 12)),  # 19주차 기말
     ],
 )
-def test_wrong_dates_fail(dates):
-    assert not check(dates, 2026, SECOND)
+def test_wrong_start_is_not_used(dates):
+    assert usable(dates, 2026, SECOND) is None
+
+
+def test_start_only_is_used_and_incomplete():
+    # 시험 시작일이 없어도 실제 개강일로 8 · 15주차를 계산하도록 저장한다
+    dates = usable(found(midterm=None, final=None), 2026, SECOND)
+    assert dates == found(midterm=None, final=None)
+    assert not complete(dates)
+
+
+@pytest.mark.parametrize(
+    ("dates", "expected"),
+    [
+        (found(midterm=date(2026, 9, 22)), found(midterm=None)),  # 4주차 중간고사
+        (found(midterm=date(2026, 11, 10)), found(midterm=None)),  # 11주차 중간고사
+        (found(final=date(2026, 11, 10)), found(final=None)),  # 11주차 기말
+        (found(final=date(2027, 1, 12)), found(final=None)),  # 19주차 기말
+    ],
+)
+def test_exam_date_out_of_range_is_cleared(dates, expected):
+    assert usable(dates, 2026, SECOND) == expected
 
 
 def test_first_term_starts_in_spring():
     spring = found(start=date(2027, 3, 2), midterm=date(2027, 4, 20), final=date(2027, 6, 8))
-    assert check(spring, 2027, SemesterTerm.first)
-    assert not check(spring, 2027, SECOND)
+    assert usable(spring, 2027, SemesterTerm.first) == spring
+    assert usable(spring, 2027, SECOND) is None
 
 
 # ---------- 찾기 · 다시 찾지 않기 ----------
@@ -96,7 +107,21 @@ def test_lookup_saves_checked_dates(monkeypatch, saved):
     assert KEY not in service._failed
 
 
-@pytest.mark.parametrize("result", [None, found(start=None), found(final=date(2027, 1, 12))])
+@pytest.mark.parametrize(
+    ("result", "stored"),
+    [
+        (found(final=None), found(final=None)),
+        (found(final=date(2027, 1, 12)), found(final=None)),  # 범위 밖 기말은 비움
+    ],
+)
+def test_lookup_saves_start_and_retries_later(monkeypatch, saved, result, stored):
+    monkeypatch.setattr(service, "search", lambda *key: result)
+    assert not service.lookup(KEY, session_factory=FakeSession)
+    assert saved == [(*KEY, stored)]
+    assert KEY in service._failed  # 하루 뒤 다시 찾아 기말을 채운다
+
+
+@pytest.mark.parametrize("result", [None, found(start=None), found(start=date(2026, 3, 2))])
 def test_lookup_without_good_dates_remembers_failure(monkeypatch, saved, result):
     monkeypatch.setattr(service, "search", lambda *key: result)
     assert not service.lookup(KEY, session_factory=FakeSession)
