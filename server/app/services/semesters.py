@@ -235,6 +235,27 @@ def save_timetable(db: Session, semester: Semester, subjects: list[SubjectIn]) -
     db.flush()
 
 
+def delete_semester(db: Session, semester: Semester) -> None:
+    """학기 삭제. 과목 · 판서 · 카드 행은 DB의 ON DELETE CASCADE로 같이 지워진다.
+
+    판서 파일(원본 · 보정본 · 카드 조각)은 DB가 지워 주지 않으므로, 지우기 전에 판서 id를 모아 두고
+    커밋한 뒤 판서마다 폴더째 지운다. 판서 삭제(captures.delete_capture)와 같은 순서
+    (DB 먼저, 파일 나중)라 커밋이 실패해도 "사진 파일이 없는 판서"가 남지 않는다.
+
+    처리 중인 판서가 있어도 괜찮다: 워커는 판서 행이 없어지면 finish · mark_failed에서
+    그사이 만든 파일까지 폴더째 지우고 끝낸다.
+    """
+    # captures가 이 모듈을 불러 쓰므로(순환 import) 여기서 불러온다
+    from app.services.captures import capture_dir
+    from app.storage import local as storage
+
+    capture_ids = db.scalars(select(Capture.id).where(Capture.semester_id == semester.id)).all()
+    db.delete(semester)
+    db.commit()
+    for capture_id in capture_ids:
+        storage.delete_tree(capture_dir(capture_id))
+
+
 # ---------- 응답 ----------
 
 

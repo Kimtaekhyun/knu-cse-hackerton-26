@@ -88,9 +88,8 @@ def set_current(semester_id: uuid.UUID, db: DbDep, user: WriteUserDep):
 
 @router.delete("/{semester_id}", status_code=204)
 def delete_semester(semester_id: uuid.UUID, db: DbDep, user: WriteUserDep):
-    """학기 삭제. 그 학기 과목 · 판서 · 카드도 같이 지워진다"""
-    db.delete(service.get_semester(db, user, semester_id))
-    db.commit()
+    """학기 삭제. 그 학기 과목 · 판서 · 카드와 판서 사진 · 카드 이미지 파일도 같이 지워진다"""
+    service.delete_semester(db, service.get_semester(db, user, semester_id))
 
 
 @router.put("/{semester_id}/timetable", response_model=SemesterDetail)
