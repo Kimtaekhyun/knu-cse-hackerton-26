@@ -32,7 +32,7 @@ final class AuthSession {
         accessToken = Keychain.read(Self.tokenKey)
     }
 
-    /// 카카오로 로그인해요. 처음 가입한 사용자면 true.
+    /// 카카오로 로그인해요. 아직 시간표를 등록하지 않은 사용자면 true (서버가 판단해요, #150).
     /// 같은 이메일의 이메일 계정이 있으면 `APIError.conflict(email_account_exists)` 를 던져요.
     func loginWithKakao() async throws -> Bool {
         let kakaoToken = try await KakaoLogin.accessToken()
@@ -51,9 +51,11 @@ final class AuthSession {
         _ = try await AuthAPI.signupEmail(email: email, password: password, name: name)
     }
 
-    /// 이메일로 로그인해요.
-    func loginWithEmail(email: String, password: String) async throws {
-        save(try await AuthAPI.loginEmail(email: email, password: password))
+    /// 이메일로 로그인해요. 아직 시간표를 등록하지 않은 사용자면 true (서버가 판단해요, #150).
+    func loginWithEmail(email: String, password: String) async throws -> Bool {
+        let response = try await AuthAPI.loginEmail(email: email, password: password)
+        save(response)
+        return response.isNewUser
     }
 
     private func finishKakao(_ kakaoToken: String, allowDuplicateEmail: Bool) async throws -> Bool {

@@ -5,16 +5,19 @@
 - 첫 카카오 로그인: 같은 이메일의 이메일 계정이 있으면 앱에 물어본다.
   이메일 가입은 메일 인증이 없어서, 아예 막으면 남이 내 이메일로 먼저 가입해
   진짜 주인의 카카오 가입을 막을 수 있기 때문이다
+
+로그인 응답의 is_new_user는 "방금 가입했는지"가 아니라 "아직 시간표를 등록하지 않았는지"다 (#150).
+가입 직후 앱을 닫았다가 다시 로그인해도 시간표 등록부터 하게 하려는 것이다.
 """
 
 from functools import cache
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
-from app.models import AuthProvider, User, UserSettings
+from app.models import AuthProvider, Semester, Subject, User, UserSettings
 from app.schemas.auth import EmailSignupRequest
 from app.services.social_auth import KakaoProfile
 
@@ -66,10 +69,8 @@ def _create(db: Session, user: User) -> User | None:
     return user
 
 
-def login_kakao(
-    db: Session, profile: KakaoProfile, allow_duplicate_email: bool = False
-) -> tuple[User, bool]:
-    """(사용자, 새로 만들었는지)를 돌려준다. 이미 있는 사용자의 이름 · 이메일은 바꾸지 않는다
+def login_kakao(db: Session, profile: KakaoProfile, allow_duplicate_email: bool = False) -> User:
+    """카카오 사용자를 찾고, 없으면 만든다. 이미 있는 사용자의 이름 · 이메일은 바꾸지 않는다
     (앱에서 고친 이름을 카카오 닉네임으로 덮어쓰지 않게).
 
     처음 가입이고 같은 이메일의 이메일 계정이 있으면, allow_duplicate_email이 아닌 한
@@ -77,7 +78,7 @@ def login_kakao(
     """
     user = _find(db, AuthProvider.kakao, profile.id)
     if user:
-        return user, False
+        return user
     if profile.email and not allow_duplicate_email:
         if _with_email(db, profile.email, AuthProvider.email):
             raise EmailAccountExists(profile.email.strip().lower())
@@ -87,12 +88,23 @@ def login_kakao(
         User(provider=AuthProvider.kakao, provider_uid=profile.id, email=profile.email, name=name),
     )
     if created:
-        return created, True
+        return created
     # 같은 카카오 계정으로 첫 로그인 요청이 동시에 두 번 온 경우. 먼저 만든 사용자를 쓴다
     user = _find(db, AuthProvider.kakao, profile.id)
     if user is None:
         raise RuntimeError("카카오 사용자를 만들지도 찾지도 못했어요.")
-    return user, False
+    return user
+
+
+def needs_timetable(db: Session, user: User) -> bool:
+    """아직 시간표를 등록하지 않았는지. 어느 학기에도 과목이 하나도 없으면 True.
+
+    학기가 있는지로는 판단하지 않는다. 시간표 등록을 "나중에 할게요"로 건너뛰고 판서를 찍으면
+    학기가 저절로 만들어지는데(semesters.ensure_current_semester), 과목은 여전히 없기 때문이다.
+    건너뛴 사용자는 다음에 로그인할 때 시간표 등록을 다시 보게 되고, 거기서 또 건너뛸 수 있다.
+    """
+    has_subject = exists().where(Subject.semester_id == Semester.id, Semester.user_id == user.id)
+    return not db.scalar(select(has_subject))
 
 
 def signup_email(db: Session, body: EmailSignupRequest) -> User:
