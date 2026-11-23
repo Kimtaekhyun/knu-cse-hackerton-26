@@ -1,10 +1,23 @@
+import pytest
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.models import Capture, Semester, SemesterTerm, Subject
+from app.services.captures import capture_dir, card_crop_key, original_key, rectified_key
 from app.services.timetable_ocr import RawBlock, RawTimetable, normalize
+from app.storage import local as storage
 from tests.db.factories import make_capture, make_semester, make_slot, make_subject, make_user
 
 URL = "/api/v1/semesters"
+
+
+@pytest.fixture(autouse=True)
+def media_dir(tmp_path, monkeypatch, jwt_settings):
+    """판서 파일을 테스트마다 새 임시 폴더에 저장한다 (학기를 지우면 판서 폴더도 지운다)"""
+    monkeypatch.setenv("MEDIA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    yield tmp_path
+    get_settings.cache_clear()
 
 
 def create(client, auth, year=2026, term="second", **kw):
@@ -142,6 +155,36 @@ def test_delete_semester_removes_subjects_and_captures(client, auth, db, user):
     assert db.scalar(select(Semester).where(Semester.id == semester.id)) is None
     assert db.scalars(select(Subject).where(Subject.semester_id == semester.id)).all() == []
     assert db.scalars(select(Capture).where(Capture.semester_id == semester.id)).all() == []
+
+
+def save_capture_files(db, user, semester) -> Capture:
+    """원본 · 보정본 · 카드 조각 파일이 있는 판서 하나"""
+    capture = make_capture(db, user, semester)
+    capture.original_key = original_key(capture.id, "jpg")
+    capture.rectified_key = rectified_key(capture.id)
+    for key in (capture.original_key, capture.rectified_key, card_crop_key(capture.id, capture.id)):
+        storage.save(key, b"image")
+    return capture
+
+
+def test_delete_semester_removes_capture_files(client, auth, db, user, media_dir):
+    semester = make_semester(db, user, year=2026, term=SemesterTerm.second)
+    other = make_semester(db, user, year=2026, term=SemesterTerm.first, is_current=False)
+    deleted_ids = [save_capture_files(db, user, semester).id for _ in range(2)]
+    kept = save_capture_files(db, user, other)
+    db.commit()
+    assert all(storage.path(capture_dir(i)).is_dir() for i in deleted_ids)
+
+    assert client.delete(f"{URL}/{semester.id}", headers=auth).status_code == 204
+    db.expire_all()
+    for capture_id in deleted_ids:
+        assert db.get(Capture, capture_id) is None
+        assert not storage.path(capture_dir(capture_id)).exists()
+    # 다른 학기의 판서는 행도 파일도 그대로
+    assert db.get(Capture, kept.id) is not None
+    assert storage.exists(kept.original_key)
+    assert storage.exists(kept.rectified_key)
+    assert storage.exists(card_crop_key(kept.id, kept.id))
 
 
 # ---------- 시간표 저장 ----------
