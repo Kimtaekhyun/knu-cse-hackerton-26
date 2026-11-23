@@ -85,7 +85,7 @@ final class Router {
     /// 홈 · 미분류함에서 열었거나 촬영 화면을 거치지 않으면(홈 앨범) nil → 서버가 시간표로 분류해요.
     var captureSubject: SemesterAPI.SubjectDTO? {
         guard let at = stack.lastIndex(of: .capture) else { return nil }
-        let flowScreens: Set<Screen> = [.capture, .processing, .captureError, .result, .copied, .splitView, .cardDetail]
+        let flowScreens: Set<Screen> = [.capture, .processing, .captureError, .result, .copied, .cardDetail]
         let origin = stack[..<at].last { !flowScreens.contains($0) }
         let subjectScreens: Set<Screen> = [.subjectLessons, .subjectCards, .subjectEmpty]
         guard let origin, subjectScreens.contains(origin) else { return nil }
