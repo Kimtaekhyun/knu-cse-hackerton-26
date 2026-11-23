@@ -210,16 +210,26 @@ struct CaptureErrorScreen: View {
     private var failed: CaptureFlow.Job? { flow.failed }
     /// 화면(칠판 · 모니터)을 못 찾은 실패인지. 아니면 글씨 찾기 · 정리 중 실패
     private var isRectify: Bool { (failed?.capture?.failReason ?? "rectify") == "rectify" }
+    /// 사진 해상도가 서버 상한을 넘어 열지 않은 실패 (#130). 다시 처리해도 같으므로 "다시 찍기"만 보여 줘요.
+    private var isTooLarge: Bool { failed?.capture?.failReason == "too_large" }
 
     private var tips: [String] {
-        isRectify
+        if isTooLarge { return ["앱 카메라로 다시 찍어 주세요", "앨범에서는 다른 사진을 골라 주세요"] }
+        return isRectify
             ? ["화면 전체가 들어오게 한 걸음 뒤에서", "빛 반사가 심하면 조금 옆으로 비켜서"]
             : ["잠시 뒤 다시 시도해 주세요", "글씨가 흐리면 가까이에서 다시 찍어 주세요"]
     }
-    private var badge: String { isRectify ? "화면 모서리가 잘렸어요" : "정리하다 멈췄어요" }
-    private var headline: String { isRectify ? "화면을 찾지 못했어요" : "판서를 정리하지 못했어요" }
+    private var badge: String {
+        if isTooLarge { return "사진이 너무 커요" }
+        return isRectify ? "화면 모서리가 잘렸어요" : "정리하다 멈췄어요"
+    }
+    private var headline: String {
+        if isTooLarge { return "사진이 너무 커서 정리하지 못했어요" }
+        return isRectify ? "화면을 찾지 못했어요" : "판서를 정리하지 못했어요"
+    }
     private var message: String {
-        isRectify ? "화면 네 모서리가 모두 나오게 다시 찍어 주세요" : "서버에서 판서를 정리하다 문제가 생겼어요"
+        if isTooLarge { return "사진 해상도가 너무 커요. 다시 찍거나 다른 사진을 골라 주세요" }
+        return isRectify ? "화면 네 모서리가 모두 나오게 다시 찍어 주세요" : "서버에서 판서를 정리하다 문제가 생겼어요"
     }
     /// 화면을 못 찾았으면 "그대로 쓰기"(사진 그대로 처리), 아니면 "다시 시도"
     private var useTitle: String { isRectify ? "그대로 쓰기" : "다시 시도" }
@@ -317,15 +327,18 @@ struct CaptureErrorScreen: View {
 
             BottomBar(caption: caption) {
                 HStack(spacing: 12) {
-                    Button(action: useAnyway) {
-                        Text(useTitle).ds(17, .bold)
-                            .padding(.horizontal, 24)
-                            .frame(height: 56)
-                            .background(Color.black.opacity(0.05))
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    // 해상도 초과는 다시 처리해도 같아서 "그대로 쓰기 · 다시 시도"를 숨겨요
+                    if !isTooLarge {
+                        Button(action: useAnyway) {
+                            Text(useTitle).ds(17, .bold)
+                                .padding(.horizontal, 24)
+                                .frame(height: 56)
+                                .background(Color.black.opacity(0.05))
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(retrying)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(retrying)
                     PrimaryButton(title: "다시 찍기", action: retake)
                 }
             }
@@ -451,8 +464,12 @@ extension CaptureErrorScreen {
             VStack(spacing: 10) {
                 Text(caption).ds(14, .medium, .dsSub)
                 HStack(spacing: 10) {
-                    GrayButton(title: useTitle, action: useAnyway).disabled(retrying)
-                    PrimaryButton(title: "다시 찍기", width: max(120, inner - 130), action: retake)
+                    if isTooLarge {
+                        PrimaryButton(title: "다시 찍기", width: inner, action: retake)
+                    } else {
+                        GrayButton(title: useTitle, action: useAnyway).disabled(retrying)
+                        PrimaryButton(title: "다시 찍기", width: max(120, inner - 130), action: retake)
+                    }
                 }
             }
             .padding(.horizontal, 20)

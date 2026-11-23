@@ -194,6 +194,22 @@ def test_card_building_error_fails_interpret(db, owner, ai, monkeypatch):
     assert (capture.status, capture.fail_reason) == (CaptureStatus.failed, "interpret")
 
 
+@pytest.mark.parametrize("skip_rectify", [False, True])
+def test_too_many_pixels_fails_without_opening_photo(db, owner, ai, monkeypatch, skip_rectify):
+    """이미 저장된 거대한 원본을 처리하거나 "그대로 쓰기"로 다시 처리해도 사진을 열지 않는다 (#130)
+
+    사진을 열면 메모리가 바닥나 서버가 죽고, 다시 켤 때 같은 판서를 또 열어 또 죽는다.
+    """
+    monkeypatch.setattr("app.services.image_limits.MAX_PIXELS", 100)
+    opened: list[bytes] = []
+    monkeypatch.setattr(worker.vision, "decode", opened.append)
+    capture = run(db, uploaded(db, owner, screen_photo()).id, skip_rectify=skip_rectify)
+    assert (capture.status, capture.fail_reason) == (CaptureStatus.failed, "too_large")
+    assert opened == []
+    assert ai["seen"] == []
+    assert storage.exists(capture.original_key)  # 원본은 남긴다
+
+
 # ---------- 건너뛰기 ----------
 
 
