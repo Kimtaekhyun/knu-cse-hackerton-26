@@ -1,4 +1,4 @@
-# 판서함 API 서버 이미지
+# chalkdrop API 서버 이미지
 FROM python:3.11-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.8 /uv /uvx /bin/

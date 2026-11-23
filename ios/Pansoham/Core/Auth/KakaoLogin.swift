@@ -1,6 +1,6 @@
 //
 //  KakaoLogin.swift
-//  판서함
+//  chalkdrop
 //
 //  카카오 SDK 감싸기: 앱 시작 때 초기화, 카카오톡에서 돌아올 때 URL 처리, 로그인해서 카카오 토큰 받기.
 //  네이티브 앱 키는 각자 `ios/Config/Local.xcconfig` 의 KAKAO_NATIVE_APP_KEY 가 Info.plist 를 거쳐 들어와요.

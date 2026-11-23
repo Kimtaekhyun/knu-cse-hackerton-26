@@ -1,6 +1,6 @@
 //
 //  AuthSession.swift
-//  판서함
+//  chalkdrop
 //
 //  로그인 상태. 우리 서버 토큰(JWT)을 Keychain에 두고, 모든 API 요청에 붙여요 (`APIClient`).
 //  - 로그인: 카카오 토큰 → 서버 `POST /auth/kakao` → 우리 토큰 저장

@@ -1,4 +1,4 @@
-"""판서함 API 진입점."""
+"""chalkdrop API 진입점."""
 
 import logging
 from contextlib import asynccontextmanager
@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
     worker.shutdown()
 
 
-app = FastAPI(title="판서함 API", lifespan=lifespan)
+app = FastAPI(title="chalkdrop API", lifespan=lifespan)
 app.include_router(api_router)
 
 UNIQUE_VIOLATION = "23505"

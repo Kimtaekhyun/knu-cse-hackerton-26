@@ -1,6 +1,6 @@
 //
 //  TimetableAPI.swift
-//  판서함
+//  chalkdrop
 //
 //  시간표 캡처 → 과목 후보 (서버 `POST /api/v1/timetable/parse`)
 //
