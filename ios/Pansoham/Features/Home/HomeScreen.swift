@@ -175,7 +175,7 @@ struct HomeScreen: View {
                 Text(card.label).ds(14, .bold, .white)
             }
             Color.clear.frame(width: 1, height: 14)
-            Text(card.title).ds(34, .bold, .white).lineLimit(1).minimumScaleFactor(0.6)
+            Text(card.title).dsLine(34, .bold, .white).minimumScaleFactor(0.6)
             Color.clear.frame(width: 1, height: 4)
             Text(card.detail).ds(15, .regular, .dsSub)
             Color.clear.frame(width: 1, height: 20)
@@ -247,7 +247,7 @@ struct HomeScreen: View {
         HStack {
             HStack(spacing: 16) {
                 Text(time).ds(15, .medium, .dsSub)
-                Text(name).ds(17, bold ? .bold : .medium, muted ? .dsSub : .black).lineLimit(1)
+                Text(name).dsLine(17, bold ? .bold : .medium, muted ? .dsSub : .black)
             }
             Spacer()
             trailing()
@@ -295,8 +295,8 @@ struct HomeScreen: View {
             HStack(spacing: 12) {
                 note.thumb(width: 52, height: 40, scale: 1.6667, radius: 8)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(note.title).ds(14, .bold)
-                    Text(note.detail).ds(12, .regular, .dsSub)
+                    Text(note.title).dsLine(14, .bold)
+                    Text(note.detail).dsLine(12, .regular, .dsSub)
                 }
                 Spacer(minLength: 0)
                 Image("chevron-right-18")

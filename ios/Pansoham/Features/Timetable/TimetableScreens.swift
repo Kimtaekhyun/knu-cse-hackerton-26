@@ -301,7 +301,7 @@ struct TimetableConfirmScreen: View {
                         Button { edit(subject) } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(subject.name).ds(17, .bold)
+                                    Text(subject.name).dsLine(17, .bold)
                                     Text(subject.time).ds(15, .regular, .dsSub)
                                 }
                                 Spacer(minLength: 0)
@@ -682,7 +682,7 @@ extension TimetableConfirmScreen {
                             Button { edit(subject) } label: {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(subject.name).ds(17, .bold)
+                                        Text(subject.name).dsLine(17, .bold)
                                         Text(subject.time).ds(15, .regular, .dsSub)
                                     }
                                     Spacer(minLength: 0)

@@ -141,10 +141,11 @@ struct SubjectHeader: View {
     var body: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(name).ds(34, .bold)
-                Text(detail).ds(17, .regular, .dsSub)
+                // 길면 … 로 줄여 오른쪽 전환 단추와 겹치지 않게 (#158)
+                Text(name).dsLine(34, .bold)
+                Text(detail).dsLine(17, .regular, .dsSub)
             }
-            Spacer()
+            Spacer(minLength: 24)
             if let mode {
                 HStack(spacing: 2) {
                     chip("수업별", on: mode == 0) { onMode(0) }
