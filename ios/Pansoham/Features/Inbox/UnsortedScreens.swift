@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct UnsortedScreen: View {
-    /// true 면 처음부터 "과목으로 옮기기" 창을 띄워요 (20 화면).
+    /// true 면 처음부터 "과목으로 옮기기" 창 (20 화면)
     var startsMoving = false
 
     @Environment(Router.self) private var router
@@ -106,7 +106,7 @@ struct UnsortedScreen: View {
         }
     }
 
-    /// 판서 지우기. 서버 판서면 `DELETE /captures/{id}` 뒤에 목록에서 빼요 (#93).
+    /// 판서 지우기. 서버 판서면 `DELETE /captures/{id}` 뒤에 목록에서 뺌.
     private func delete(_ item: Item) {
         guard isLive, let id = item.captureID else {
             withAnimation(.easeInOut(duration: 0.25)) { samples.removeAll { $0.id == item.id } }
@@ -138,7 +138,7 @@ struct UnsortedScreen: View {
         .disabled(deletingNow)
     }
 
-    /// 고른 과목으로 옮기기. 서버 판서면 `PATCH /captures/{id}` 뒤에 목록에서 빼요.
+    /// 고른 과목으로 옮기기. 서버 판서면 `PATCH /captures/{id}` 뒤에 목록에서 뺌
     private func move(_ item: Item) {
         guard isLive, let id = item.captureID else {
             withAnimation(.easeInOut(duration: 0.25)) {
@@ -188,7 +188,7 @@ struct UnsortedScreen: View {
             }
             SubjectHeader(name: "미분류함", detail: headerDetail)
 
-            // 미분류 목록. 판서가 많으면 스크롤돼요 (과목 폴더 15 와 같은 방식)
+            // 미분류 목록. 판서가 많으면 스크롤
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     if shownItems.isEmpty && !items.isEmpty { NoSearchResult(query: query) }
@@ -239,8 +239,9 @@ struct UnsortedScreen: View {
                     .onTapGesture { close() }
                     .transition(.opacity)
 
-                moveDialog(moving)
-                    .at(357, 192)
+                // 과목이 많아도 화면 안에 들어오게 세로 가운데에 둬요 (#153)
+                moveDialog(moving, maxListHeight: Self.maxMoveListHeight)
+                    .at(357, max(40, (DS.height - moveDialogHeight(maxListHeight: Self.maxMoveListHeight)) / 2))
                     .transition(.opacity.combined(with: .offset(y: 40)).animation(.easeOut(duration: 0.4).delay(0.05)))
             }
         }
@@ -249,8 +250,26 @@ struct UnsortedScreen: View {
         }
     }
 
-    /// 과목 선택 창
-    private func moveDialog(_ item: Item) -> some View {
+    /// 과목 한 줄 높이
+    static let moveRowHeight: CGFloat = 52
+    /// 과목 목록 오른쪽 스크롤 막대 자리
+    static let moveScrollGutter: CGFloat = 18
+    /// 과목 목록 최대 높이 (넘으면 스크롤, 9줄)
+    static let maxMoveListHeight: CGFloat = moveRowHeight * 9
+    /// 창에서 과목 목록을 뺀 높이 (위아래 여백 · 제목 · 판서 정보 · 버튼)
+    static let moveDialogChrome: CGFloat = 28 + 27 + 6 + 18 + 16 + 16 + 56 + 24
+
+    /// 과목 목록이 차지하는 높이 (과목이 적으면 그만큼, 많으면 최대 높이까지)
+    func moveListHeight(maxListHeight: CGFloat) -> CGFloat {
+        subjects.isEmpty ? 50 : min(CGFloat(subjects.count) * Self.moveRowHeight, maxListHeight)
+    }
+
+    func moveDialogHeight(maxListHeight: CGFloat) -> CGFloat {
+        Self.moveDialogChrome + moveListHeight(maxListHeight: maxListHeight)
+    }
+
+    /// 과목 선택 창.
+    private func moveDialog(_ item: Item, maxListHeight: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("어느 과목으로 옮길까요?").ds(22, .bold)
             Color.clear.frame(width: 1, height: 6)
@@ -261,19 +280,28 @@ struct UnsortedScreen: View {
                 Text("옮길 과목이 없어요. 시간표를 먼저 등록해 주세요.").ds(15, .regular, .dsSub)
                     .padding(.vertical, 14)
             }
-            ForEach(subjects, id: \.self) { subject in
-                let on = target == subject
-                Button { target = subject } label: {
-                    HStack {
-                        Text(subject).ds(17, on ? .bold : .medium)
-                        Spacer()
-                        Image(on ? "radio-on-24" : "radio-off-24")
+            if !subjects.isEmpty {
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(spacing: 0) {
+                        ForEach(subjects, id: \.self) { subject in
+                            let on = target == subject
+                            Button { target = subject } label: {
+                                HStack {
+                                    Text(subject).ds(17, on ? .bold : .medium).lineLimit(1)
+                                    Spacer()
+                                    Image(on ? "radio-on-24" : "radio-off-24")
+                                }
+                                .frame(width: 424, height: Self.moveRowHeight)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .padding(.vertical, 14)
-                    .frame(width: 424)
-                    .contentShape(Rectangle())
+                    .frame(width: 424 + Self.moveScrollGutter, alignment: .leading)
                 }
-                .buttonStyle(.plain)
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollIndicatorsFlash(onAppear: true)
+                .frame(width: 424 + Self.moveScrollGutter, height: moveListHeight(maxListHeight: maxListHeight), alignment: .leading)
             }
 
             Color.clear.frame(width: 1, height: 16)
@@ -285,7 +313,7 @@ struct UnsortedScreen: View {
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                PrimaryButton(title: movingNow ? "옮기는 중…" : "\(target)로 옮기기", width: 294,
+                PrimaryButton(title: movingNow ? "옮기는 중…" : "\(target)(으)로 옮기기", width: 294,
                               enabled: !movingNow && subjects.contains(target)) {
                     move(item)
                 }
@@ -358,8 +386,11 @@ extension UnsortedScreen {
                     Color.black.opacity(0.4)
                         .ignoresSafeArea()
                         .onTapGesture { close() }
-                    moveDialog(moving)
-                        .scaleEffect(min(1, (size.width - 32) / 480))
+                    let scale = min(1, (size.width - 32) / 480)
+                    // 창 높이가 화면을 넘지 않게 과목 목록 높이를 줄여요 (#153)
+                    let available = (size.height - 48) / scale - Self.moveDialogChrome
+                    moveDialog(moving, maxListHeight: min(Self.maxMoveListHeight, max(Self.moveRowHeight * 3, available)))
+                        .scaleEffect(scale)
                         .transition(.opacity.combined(with: .offset(y: 40)).animation(.easeOut(duration: 0.4).delay(0.05)))
                 }
                 .transition(.opacity)
