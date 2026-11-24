@@ -18,9 +18,9 @@
 ![Gemini](https://img.shields.io/badge/Gemini-3.5_Flash--Lite-8E75B2?logo=googlegemini&logoColor=white)
 ![Docker Compose](https://img.shields.io/badge/Docker_Compose-dev-2496ED?logo=docker&logoColor=white)
 
-| API 문서 (로컬) |
-| --- |
-| http://localhost:8000/docs |
+| API 문서 | OpenAPI 스펙 |
+| --- | --- |
+| [chalkdrop API 문서 보기](https://redocly.github.io/redoc/?url=https://raw.githubusercontent.com/kangmin04/knu-cse-hackerton-26/main/docs/api/openapi.json&nocors) | [`docs/api/openapi.json`](docs/api/openapi.json) |
 
 ## 무엇을 해결하나요
 
@@ -145,6 +145,11 @@ open ios/Pansoham.xcodeproj                                      # iPad 시뮬�
 - AI 키가 없어도 서버는 뜹니다. 시간표 · 판서 인식만 동작하지 않고, 학사일정은 추정 개강일(1학기 3/2 · 2학기 9/1)로 계산합니다.
 - 실기기에서 실행할 때는 `Local.xcconfig` 의 `API_BASE_URL` 에 서버를 띄운 Mac 주소(예: `http:/$()/my-macbook.local:8000`)를 적습니다. 시뮬레이터는 `localhost` 를 쓰므로 지웁니다.
 - 모든 비밀값은 `.env` · `Local.xcconfig` 에만 두고 커밋하지 않습니다. `.env.example` 에는 이름과 용도만 있습니다.
+- 서버를 띄우면 http://localhost:8000/docs 에서 API를 직접 호출해 볼 수 있습니다. API를 바꿨다면 저장소의 API 문서도 다시 만듭니다.
+
+  ```bash
+  cd server && uv run python -c "import json; from app.main import app; print(json.dumps(app.openapi(), ensure_ascii=False, indent=2))" > ../docs/api/openapi.json
+  ```
 
 | 변수 | 용도 |
 | --- | --- |
@@ -174,7 +179,7 @@ open ios/Pansoham.xcodeproj                                      # iPad 시뮬�
 │   │   └── storage/       판서 사진 저장
 │   ├── alembic/           DB 마이그레이션
 │   └── tests/             pytest
-├── docs/           설계 문서 자리
+├── docs/api/       openapi.json — 서버 코드에서 만든 API 문서
 ├── docker-compose.yml
 └── .github/        CI
 ```
