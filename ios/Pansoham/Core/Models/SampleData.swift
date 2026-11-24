@@ -33,7 +33,7 @@ struct Sticker: Identifiable, Hashable {
     var x: CGFloat = 204.6, y: CGFloat = 36.27, w: CGFloat = 159.96, h: CGFloat = 100.44
     var handwriting = false     // 처음부터 손글씨로 보여 줄지
     var inkImage: String? = nil // 손글씨 그림이 따로 있으면 그 이름
-    /// 서버에서 받은 판서 사진 (없으면 샘플 사진 `board-photo`). 자리는 너비 372 · 높이 372 × photoAspect 기준
+    /// 서버에서 받은 판서 사진 (없으면 회색 빈 자리). 자리는 너비 372 · 높이 372 × photoAspect 기준
     var photo: UIImage? = nil
     var photoAspect: CGFloat = 279.0 / 372.0
     /// 서버 카드 id (샘플이면 nil, #99)

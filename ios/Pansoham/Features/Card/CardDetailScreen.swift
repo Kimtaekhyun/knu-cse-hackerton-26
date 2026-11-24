@@ -185,8 +185,7 @@ struct CardDetailScreen: View {
                     Color.dsPanel
                     if card != nil { livePhoto.at(24, 24) } else {
                     ZStack(alignment: .topLeading) {
-                        Image("board-photo")
-                            .resizable()
+                        Color.black.opacity(0.05)
                             .frame(width: 452, height: 252 * 1.3459)
                             .offset(y: -252 * 0.0673)
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -313,8 +312,7 @@ extension CardDetailScreen {
                     Color.dsPanel
                     if card != nil { livePhoto.at(24, 24) } else {
                     ZStack(alignment: .topLeading) {
-                        Image("board-photo")
-                            .resizable()
+                        Color.black.opacity(0.05)
                             .frame(width: 452, height: 252 * 1.3459)
                             .offset(y: -252 * 0.0673)
                         RoundedRectangle(cornerRadius: 6, style: .continuous)

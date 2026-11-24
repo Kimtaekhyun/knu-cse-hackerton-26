@@ -18,7 +18,7 @@ struct InkCrop: View {
         let scale = width / max(sticker.w, 1)
         let top = sticker.y + (sticker.h - height / scale) / 2
         Group {
-            if let photo = sticker.photo { Image(uiImage: photo).resizable() } else { Image("board-photo").resizable() }
+            if let photo = sticker.photo { Image(uiImage: photo).resizable() } else { Color.black.opacity(0.05) }
         }
             .frame(width: 372 * scale, height: 372 * sticker.photoAspect * scale)
             .offset(x: -sticker.x * scale, y: -top * scale)
@@ -508,7 +508,12 @@ struct OriginalPhotoView: View {
         ZStack(alignment: .topTrailing) {
             Color.black.ignoresSafeArea()
             Group {
-                if let image { Image(uiImage: image).resizable() } else { Image("board-photo").resizable() }
+                if let image {
+                    Image(uiImage: image).resizable()
+                } else {
+                    // 사진이 없으면 4:3 빈 자리만
+                    Color.white.opacity(0.08).aspectRatio(4 / 3, contentMode: .fit)
+                }
             }
                 .scaledToFit()
                 .padding(24)
