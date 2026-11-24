@@ -46,7 +46,7 @@ enum APIError: LocalizedError {
 enum APIClient {
     /// 올리기 전에 줄이는 긴 변 길이 (서버 10MB 제한 · 업로드 시간 때문)
     nonisolated static let maxImageSide: CGFloat = 2048
-    /// 서버가 Gemini 재시도 · 분당 제한으로 1분 넘게 걸릴 수 있어서 넉넉히 기다려요.
+    /// 서버가 AI 재시도 · 분당 제한으로 1분 넘게 걸릴 수 있어서 넉넉히 기다려요.
     static let timeout: TimeInterval = 180
 
     /// 이미지 한 장을 multipart(`image` 칸)로 올리고 JSON 답을 `type` 으로 읽어요.
