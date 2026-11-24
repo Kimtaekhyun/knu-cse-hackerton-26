@@ -114,7 +114,7 @@ struct AlbumReviewSheet: View {
                     .padding(.vertical, 2)
                 }
 
-                Text("자료구조 폴더에 저장").ds(14, .bold, .dsBlue)
+                Text(placeText).ds(14, .bold, .dsBlue)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                     .background(Color.dsBlueSoft, in: Capsule())
@@ -137,6 +137,12 @@ struct AlbumReviewSheet: View {
             .background(Color.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             .padding(20)
         }
+        .task { await CaptureFlow.shared.loadDestination() }
+    }
+
+    // 지금 수업 폴더, 없으면 미분류함
+    private var placeText: String {
+        "\(CaptureFlow.shared.destination?.placeTitle ?? "미분류함")에 저장"
     }
 
     private func thumb(_ photo: UIImage, index: Int) -> some View {
