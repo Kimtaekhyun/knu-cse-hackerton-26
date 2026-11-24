@@ -258,10 +258,10 @@ struct SubjectCard: View {
 
 // MARK: - 판서 사진 잘라 보여 주기
 
-/// 피그마처럼 사진 한 장의 일부만 잘라 보여줌
-/// `scale` 은 틀 대비 사진 크기, `x`·`y` 는 틀 대비 이동 비율.
+/// 샘플 판서 미리보기 자리 (로그인 전 연출). 회색 빈 상자를 보여 줘요.
+/// 예전에는 피그마 예시 사진 한 장의 일부를 잘라 보여 줬어요 (`scale` 은 틀 대비 사진 크기,
+/// `x`·`y` 는 틀 대비 이동 비율). 그 사진을 지우면서 지금은 쓰지 않지만, 샘플 데이터가 넘기는 값이라 남겨 둬요.
 struct BoardPhoto: View {
-    var name = "board-photo"
     let width: CGFloat
     let height: CGFloat
     var scaleX: CGFloat = 1
@@ -271,11 +271,6 @@ struct BoardPhoto: View {
     var radius: CGFloat = 8
 
     var body: some View {
-        Image(name)
-            .resizable()
-            .frame(width: width * scaleX, height: height * scaleY)
-            .offset(x: width * x, y: height * y)
-            .frame(width: width, height: height, alignment: .topLeading)
-            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        CoverPhoto(width: width, height: height, radius: radius)
     }
 }
