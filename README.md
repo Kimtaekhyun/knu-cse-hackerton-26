@@ -14,8 +14,8 @@
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
 ![OpenCV](https://img.shields.io/badge/OpenCV-5.1-5C3EE8?logo=opencv&logoColor=white)
-![Gemini](https://img.shields.io/badge/Gemini-3.5_Flash--Lite-8E75B2?logo=googlegemini&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-Haiku_%2F_Opus_5.5-D97757?logo=anthropic&logoColor=white)
+![Gemini](https://img.shields.io/badge/Gemini-3.5_Flash--Lite-8E75B2?logo=googlegemini&logoColor=white)
 ![Docker Compose](https://img.shields.io/badge/Docker_Compose-dev-2496ED?logo=docker&logoColor=white)
 
 | API 문서 (로컬) |
@@ -51,7 +51,7 @@ flowchart LR
   subgraph server[서버 · 판서 처리 워커]
     UP --> DEST[촬영 시각 → 과목 정하기<br/>없으면 미분류함]
     DEST --> RECT[화면 찾아 펴기<br/>OpenCV]
-    RECT --> SEG[필기 덩어리 찾기<br/>Gemini / Claude]
+    RECT --> SEG[필기 덩어리 찾기<br/>Claude Haiku]
     SEG --> INT[카드 만들기<br/>글자 · 수식 · 코드]
     INT --> LTX[LaTeX 정리<br/>SwiftMath가 그릴 수 있게]
   end
@@ -85,7 +85,7 @@ flowchart LR
 
   subgraph ext[외부]
     KAKAO[카카오 로그인]
-    LLM[Gemini 3.5 Flash-Lite<br/>또는 Claude Haiku 5.5]
+    LLM[Claude Haiku 5.5<br/>또는 Gemini 3.5 Flash-Lite]
     CAL[Claude Opus 5.5<br/>웹 검색]
   end
 
@@ -122,7 +122,7 @@ flowchart LR
 | 앱 패키지 | Kakao iOS SDK 2.30 (로그인) · SwiftMath 1.7 (수식 그리기) |
 | 서버 | Python 3.11 · FastAPI 0.163 · Uvicorn · SQLAlchemy 2.1 · Alembic · psycopg 3 · pydantic-settings · PyJWT · Argon2 · httpx · uv |
 | 이미지 처리 | OpenCV 5.1 (headless) · Pillow · NumPy |
-| AI | 판서 · 시간표 인식: Google Gemini `gemini-3.5-flash-lite` (기본) 또는 Anthropic Claude `claude-haiku-5-5` (`LLM_PROVIDER=claude`) · 학사일정 웹 검색: Claude `claude-opus-5-5` |
+| AI | 판서 · 시간표 인식: Anthropic Claude `claude-haiku-5-5` (기본) 또는 Google Gemini `gemini-3.5-flash-lite` (`LLM_PROVIDER=gemini`) · 학사일정 웹 검색: Claude `claude-opus-5-5` |
 | DB | PostgreSQL 17 |
 | 개발 환경 | Docker Compose · GitHub Actions |
 | 품질 도구 | ruff (check · format, line-length 100) · pytest |
@@ -133,7 +133,7 @@ flowchart LR
 
 ```bash
 # 서버 → http://localhost:8000/docs
-cp .env.example .env      # GEMINI_API_KEY, JWT_SECRET, KAKAO_APP_ID 등
+cp .env.example .env      # ANTHROPIC_API_KEY, JWT_SECRET, KAKAO_APP_ID 등
 docker compose up         # Postgres + API, 켤 때 alembic upgrade head 자동 실행
 
 # iPad 앱
@@ -148,8 +148,8 @@ open ios/Pansoham.xcodeproj                                      # iPad 시뮬�
 
 | 변수 | 용도 |
 | --- | --- |
-| `GEMINI_API_KEY` | 시간표 · 판서 인식 (기본 AI) |
-| `ANTHROPIC_API_KEY` | 학사일정 웹 검색 · `LLM_PROVIDER=claude` 로 Claude를 쓸 때 |
+| `ANTHROPIC_API_KEY` | 시간표 · 판서 인식 (기본 AI) · 학사일정 웹 검색 |
+| `LLM_PROVIDER`, `GEMINI_API_KEY` | Gemini를 쓸 때 `LLM_PROVIDER=gemini` 와 함께 |
 | `JWT_SECRET` | 로그인 토큰 서명 키 (32자 이상 무작위 값) |
 | `KAKAO_APP_ID` | 카카오 로그인 |
 | `PIPELINE_WORKERS` | 판서를 동시에 몇 장 처리할지 (기본 1) |
@@ -169,7 +169,7 @@ open ios/Pansoham.xcodeproj                                      # iPad 시뮬�
 │   ├── app/
 │   │   ├── api/v1/        REST API
 │   │   ├── models/        SQLAlchemy 모델
-│   │   ├── services/      로그인 · 시간표 · 홈 · 학사일정 · 시험 기간 · AI 연결(Gemini · Claude)
+│   │   ├── services/      로그인 · 시간표 · 홈 · 학사일정 · 시험 기간 · AI 연결(Claude · Gemini)
 │   │   │   └── pipeline/  판서 처리 — vision(OpenCV) · regions(AI) · latex · worker
 │   │   └── storage/       판서 사진 저장
 │   ├── alembic/           DB 마이그레이션

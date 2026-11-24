@@ -17,7 +17,7 @@ Team repository for the Kyungpook National University School of Computer Science
 - Server (BE and FE alike): `docker compose up` from the repo root starts Postgres + the API at `localhost:8000`. On start the API runs `alembic upgrade head`, and `./server` is mounted with `--reload`, so code edits apply without rebuilding. Rebuild only after dependency changes: `docker compose up --build`. Reset the DB: `docker compose down -v`
 - Server tests: `docker compose exec api uv run --no-sync pytest` (DB tests use the `pansoham_test` database and are skipped if Postgres is unreachable; `REQUIRE_DB=1` makes that a failure)
 - New migration after changing models in `server/app/models/`: `docker compose exec api uv run --no-sync alembic revision --autogenerate -m "..."`, then review the file in `server/alembic/versions/`
-- Settings come from the repo-root `.env` (see `.env.example`); `GEMINI_API_KEY` (or `ANTHROPIC_API_KEY` with `LLM_PROVIDER=claude`) is only needed for timetable recognition
+- Settings come from the repo-root `.env` (see `.env.example`); `ANTHROPIC_API_KEY` is needed for timetable and board recognition (default `LLM_PROVIDER=claude`) and for academic calendar web search; `GEMINI_API_KEY` is only needed with `LLM_PROVIDER=gemini`
 
 ## Collaboration Rules
 - Do not push directly to main. Branch → PR → merge after review. The user merges themselves.
