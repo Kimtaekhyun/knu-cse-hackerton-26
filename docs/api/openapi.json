@@ -1,0 +1,3116 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "chalkdrop API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/captures": {
+      "post": {
+        "tags": [
+          "captures"
+        ],
+        "summary": "Upload",
+        "description": "판서 사진을 받아 저장하고 처리 줄에 세운다. 처음은 202, 이미 받은 id를 다시 보내면 200.\n\n사용자 잠금(WriteUserDep) 안에서 확인하므로 같은 id가 동시에 와도 하나만 저장된다.\n처리 줄에는 DB 커밋이 끝난 뒤에 세운다 (워커가 아직 없는 판서를 찾지 않게).",
+        "operationId": "upload_api_v1_captures_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_api_v1_captures_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "captures"
+        ],
+        "summary": "List Captures",
+        "description": "최신 판서부터. 과목 폴더(subject_id) · 미분류함(unsorted) · 옮기지 않은 판서(unmoved)\n\n다음 쪽은 받은 목록 마지막 판서의 taken_at을 before로, id를 before_id로 보낸다.\nbefore_id만 보내면 400",
+        "operationId": "list_captures_api_v1_captures_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject Id"
+            }
+          },
+          {
+            "name": "unsorted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Unsorted"
+            }
+          },
+          {
+            "name": "unmoved",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Unmoved"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CaptureOut"
+                  },
+                  "title": "Response List Captures Api V1 Captures Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/captures/destination": {
+      "get": {
+        "tags": [
+          "captures"
+        ],
+        "summary": "Get Destination",
+        "description": "지금(at, 없으면 현재 시각) 찍으면 어느 과목에 저장되는지. 촬영 화면의 \"○○ 폴더에 저장\"\n\n과목이 null이면 미분류함. 틀렸으면 앱이 과목을 골라 업로드에 subject_id로 보낸다.\n/{capture_id}보다 먼저 선언해야 \"destination\"이 판서 id로 읽히지 않는다.",
+        "operationId": "get_destination_api_v1_captures_destination_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "At"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Destination"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/captures/{capture_id}": {
+      "get": {
+        "tags": [
+          "captures"
+        ],
+        "summary": "Get Capture",
+        "description": "처리 상태 · 결과. 처리 중 화면은 이걸 1초쯤마다 불러 status를 확인한다",
+        "operationId": "get_capture_api_v1_captures__capture_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "capture_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Capture Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "captures"
+        ],
+        "summary": "Move Capture",
+        "description": "과목으로 옮기기 (미분류함 → 과목, 과목 → 과목, 과목 → 미분류함)",
+        "operationId": "move_capture_api_v1_captures__capture_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "capture_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Capture Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureMove"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "captures"
+        ],
+        "summary": "Delete Capture",
+        "description": "판서 삭제. 카드와 사진 파일도 함께 지운다",
+        "operationId": "delete_capture_api_v1_captures__capture_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "capture_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Capture Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/captures/{capture_id}/retry": {
+      "post": {
+        "tags": [
+          "captures"
+        ],
+        "summary": "Retry Capture",
+        "description": "처리에 실패한 판서를 다시 처리한다. skip_rectify면 화면을 못 찾아도 사진 그대로 쓴다",
+        "operationId": "retry_capture_api_v1_captures__capture_id__retry_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "capture_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Capture Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CaptureRetry"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/captures/{capture_id}/image": {
+      "get": {
+        "tags": [
+          "captures"
+        ],
+        "summary": "Get Image",
+        "description": "찍은 사진(original) 또는 반듯하게 편 사진(rectified, 처리 후에만 있음)",
+        "operationId": "get_image_api_v1_captures__capture_id__image_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "capture_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Capture Id"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "original",
+                "rectified"
+              ],
+              "type": "string",
+              "default": "original",
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cards/moved": {
+      "put": {
+        "tags": [
+          "cards"
+        ],
+        "summary": "Set Moved",
+        "description": "옮김 표시 · 취소 (굿노트로 끌어다 놓기 · 복사 · \"N개 복사\", 수동 되돌리기)\n\n여러 장을 한 번에 바꾼다. 하나라도 내 카드가 아니면 아무것도 바꾸지 않고 404.\n\"아직 옮기지 않은 판서\"(GET /captures?unmoved=true)는 옮기지 않은 카드가 남은 판서다.",
+        "operationId": "set_moved_api_v1_cards_moved_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardsMovedIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CardDetail"
+                  },
+                  "type": "array",
+                  "title": "Response Set Moved Api V1 Cards Moved Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cards/{card_id}": {
+      "get": {
+        "tags": [
+          "cards"
+        ],
+        "summary": "Get Card",
+        "operationId": "get_card_api_v1_cards__card_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Card Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "cards"
+        ],
+        "summary": "Update Card",
+        "description": "제목 · 내용 · 종류 중 보낸 것만 고친다. 처음 인식 결과는 남아서 되돌릴 수 있다",
+        "operationId": "update_card_api_v1_cards__card_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Card Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "cards"
+        ],
+        "summary": "Delete Card",
+        "description": "카드와 스티커 PNG를 지운다. 판서 · 다른 카드는 그대로",
+        "operationId": "delete_card_api_v1_cards__card_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Card Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cards/{card_id}/revert": {
+      "post": {
+        "tags": [
+          "cards"
+        ],
+        "summary": "Revert Card",
+        "description": "원래대로 되돌리기: 내용을 처음 인식 결과로",
+        "operationId": "revert_card_api_v1_cards__card_id__revert_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Card Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cards/{card_id}/image": {
+      "get": {
+        "tags": [
+          "cards"
+        ],
+        "summary": "Get Image",
+        "description": "카드 스티커: 손글씨만 남긴 투명 PNG (손글씨 보기 · 드래그용, 복사 색은 앱이 입힌다)",
+        "operationId": "get_image_api_v1_cards__card_id__image_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Card Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/timetable/parse": {
+      "post": {
+        "tags": [
+          "timetable"
+        ],
+        "summary": "Parse",
+        "description": "에브리타임 시간표 캡처를 받아 과목 후보를 돌려준다.\n\n부를 때마다 AI를 쓰므로 로그인한 사용자만 받는다 (#128). 토큰이 없거나 틀리면\n본문을 실행하기 전에 401로 끝나서 AI를 부르지 않는다. 읽기만 해서 WriteUserDep은 쓰지 않는다.\nAI 호출이 오래 막히므로 async가 아닌 일반 함수로 둔다 (FastAPI가 스레드에서 돌린다).",
+        "operationId": "parse_api_v1_timetable_parse_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_parse_api_v1_timetable_parse_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimetableParseResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/semesters": {
+      "get": {
+        "tags": [
+          "semesters"
+        ],
+        "summary": "List Semesters",
+        "description": "전체 학기. 최근 학기부터",
+        "operationId": "list_semesters_api_v1_semesters_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SemesterOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Semesters Api V1 Semesters Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "semesters"
+        ],
+        "summary": "Create Semester",
+        "operationId": "create_semester_api_v1_semesters_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SemesterCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemesterDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/semesters/suggested": {
+      "get": {
+        "tags": [
+          "semesters"
+        ],
+        "summary": "Suggested",
+        "description": "오늘 날짜 기준 기본 학기. 앱 학기 선택 휠의 처음 값으로 쓴다\n\n3~6월 1학기 · 7~8월 여름학기 · 9~12월 2학기 · 1~2월 지난해 겨울학기 (판서 자동 분류와 같은 규칙)",
+        "operationId": "suggested_api_v1_semesters_suggested_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestedSemester"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/semesters/timetable": {
+      "put": {
+        "tags": [
+          "semesters"
+        ],
+        "summary": "Save Term Timetable",
+        "description": "고른 학기로 \"이대로 저장\" (가입 후 첫 등록 · 새 학기 추가). 학기가 없으면 만든다\n\n학기 만들기 · 현재 학기 지정 · 과목 저장을 한 번에 해서, 중간에 실패해도 빈 학기가 남지 않고\n같은 요청을 다시 보내도 학기가 두 개 생기지 않는다. 과목 저장 규칙은 학기 id로 저장할 때와 같다.",
+        "operationId": "save_term_timetable_api_v1_semesters_timetable_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TermTimetableSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemesterDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/semesters/current": {
+      "get": {
+        "tags": [
+          "semesters"
+        ],
+        "summary": "Get Current",
+        "description": "현재 학기와 과목 · 시간표. 없으면 404 (앱은 시간표 등록 화면으로)",
+        "operationId": "get_current_api_v1_semesters_current_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemesterDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/semesters/{semester_id}": {
+      "get": {
+        "tags": [
+          "semesters"
+        ],
+        "summary": "Get Semester",
+        "operationId": "get_semester_api_v1_semesters__semester_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "semester_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Semester Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemesterDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "semesters"
+        ],
+        "summary": "Delete Semester",
+        "description": "학기 삭제. 그 학기 과목 · 판서 · 카드와 판서 사진 · 카드 이미지 파일도 같이 지워진다",
+        "operationId": "delete_semester_api_v1_semesters__semester_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "semester_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Semester Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/semesters/{semester_id}/current": {
+      "put": {
+        "tags": [
+          "semesters"
+        ],
+        "summary": "Set Current",
+        "description": "이 학기를 현재 학기로. 기존 현재 학기는 지난 학기가 된다",
+        "operationId": "set_current_api_v1_semesters__semester_id__current_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "semester_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Semester Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemesterOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/semesters/{semester_id}/timetable": {
+      "put": {
+        "tags": [
+          "semesters"
+        ],
+        "summary": "Save Timetable",
+        "description": "시간표 확인 화면의 \"이대로 저장\". 보낸 목록이 그 학기 과목 전체가 된다\n\n이름이 같은 과목은 유지(판서도 유지)하고, 빠진 과목은 지운다(판서는 미분류함으로).",
+        "operationId": "save_timetable_api_v1_semesters__semester_id__timetable_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "semester_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Semester Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimetableSave"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemesterDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/semesters/{semester_id}/subjects": {
+      "post": {
+        "tags": [
+          "semesters"
+        ],
+        "summary": "Create Subject",
+        "operationId": "create_subject_api_v1_semesters__semester_id__subjects_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "semester_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Semester Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubjectIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/subjects/{subject_id}": {
+      "get": {
+        "tags": [
+          "subjects"
+        ],
+        "summary": "Get Subject",
+        "operationId": "get_subject_api_v1_subjects__subject_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Subject Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "subjects"
+        ],
+        "summary": "Update Subject",
+        "description": "이름 · 시간 칸 수정. 보낸 것만 바꾼다",
+        "operationId": "update_subject_api_v1_subjects__subject_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Subject Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubjectUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "subjects"
+        ],
+        "summary": "Delete Subject",
+        "description": "과목 삭제. 그 과목 판서는 지우지 않고 미분류함으로 보낸다",
+        "operationId": "delete_subject_api_v1_subjects__subject_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Subject Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/kakao": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login Kakao",
+        "description": "카카오 로그인. 처음이면 가입(사용자 · 기본 설정 생성)까지 한다.\n\n처음 가입인데 같은 이메일의 이메일 계정이 있으면 409 email_account_exists.\n앱이 \"카카오로 새로 가입\"을 고르면 allow_duplicate_email: true로 다시 보낸다.\n\n카카오 호출이 막히므로 async가 아닌 일반 함수로 둔다 (FastAPI가 스레드에서 돌린다).",
+        "operationId": "login_kakao_api_v1_auth_kakao_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KakaoLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/email/signup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Signup Email",
+        "description": "이메일 가입. 사용자 · 기본 설정을 만들고 바로 로그인한 토큰을 준다.\n\n같은 이메일의 계정이 있으면 409 (email_taken · kakao_account_exists).",
+        "operationId": "signup_email_api_v1_auth_email_signup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailSignupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/email/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login Email",
+        "description": "이메일 로그인. 없는 이메일과 틀린 비밀번호는 같은 401이라 가입 여부가 드러나지 않는다.",
+        "operationId": "login_email_api_v1_auth_email_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Get Me",
+        "description": "내 정보. 앱이 자동 로그인할 때 저장된 토큰이 아직 유효한지 확인하는 데도 쓴다.",
+        "operationId": "get_me_api_v1_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Update Me",
+        "description": "이름 · 학교 수정. 보낸 것만 바꾼다",
+        "operationId": "update_me_api_v1_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/settings": {
+      "patch": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Update My Settings",
+        "description": "알림 스위치. 보낸 것만 바꾼다",
+        "operationId": "update_my_settings_api_v1_me_settings_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/home": {
+      "get": {
+        "tags": [
+          "home"
+        ],
+        "summary": "Get Home",
+        "description": "메인 화면 값 한 번에. at을 주면 그 시각 기준 (테스트 · 시연용, 없으면 지금)\n\n\"아직 옮기지 않은 판서\"는 GET /captures?unmoved=true를 쓴다.",
+        "operationId": "get_home_api_v1_home_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "At"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "description": "서버가 살아 있는지 확인",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthProvider": {
+        "type": "string",
+        "enum": [
+          "kakao",
+          "email"
+        ],
+        "title": "AuthProvider"
+      },
+      "Body_parse_api_v1_timetable_parse_post": {
+        "properties": {
+          "image": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Image"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image"
+        ],
+        "title": "Body_parse_api_v1_timetable_parse_post"
+      },
+      "Body_upload_api_v1_captures_post": {
+        "properties": {
+          "image": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Image"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id",
+            "description": "앱이 만든 판서 id. 답을 못 받아 다시 보낼 때 같은 값을 쓴다"
+          },
+          "taken_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taken At",
+            "description": "셔터를 누른 시각 (앨범은 찍은 시각). 없으면 지금. 시간대가 없으면 서울"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id",
+            "description": "저장할 과목. 없으면 찍은 시각의 수업으로 자동 분류한다"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image"
+        ],
+        "title": "Body_upload_api_v1_captures_post"
+      },
+      "CaptureDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "semester_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Semester Id"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "taken_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Taken At"
+          },
+          "class_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Class Date"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CaptureStatus"
+          },
+          "fail_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fail Reason"
+          },
+          "card_count": {
+            "type": "integer",
+            "title": "Card Count"
+          },
+          "unmoved_count": {
+            "type": "integer",
+            "title": "Unmoved Count"
+          },
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/CardOut"
+            },
+            "type": "array",
+            "title": "Cards"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "semester_id",
+          "subject_id",
+          "taken_at",
+          "class_date",
+          "status",
+          "fail_reason",
+          "card_count",
+          "unmoved_count",
+          "cards"
+        ],
+        "title": "CaptureDetail"
+      },
+      "CaptureMove": {
+        "properties": {
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject_id"
+        ],
+        "title": "CaptureMove",
+        "description": "과목으로 옮기기. null을 보내면 미분류함으로 보낸다 (필드는 꼭 보내야 한다)"
+      },
+      "CaptureOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "semester_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Semester Id"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "taken_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Taken At"
+          },
+          "class_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Class Date"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CaptureStatus"
+          },
+          "fail_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fail Reason"
+          },
+          "card_count": {
+            "type": "integer",
+            "title": "Card Count"
+          },
+          "unmoved_count": {
+            "type": "integer",
+            "title": "Unmoved Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "semester_id",
+          "subject_id",
+          "taken_at",
+          "class_date",
+          "status",
+          "fail_reason",
+          "card_count",
+          "unmoved_count"
+        ],
+        "title": "CaptureOut",
+        "description": "목록 · 상세 공통"
+      },
+      "CaptureRetry": {
+        "properties": {
+          "skip_rectify": {
+            "type": "boolean",
+            "title": "Skip Rectify",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "CaptureRetry",
+        "description": "처리에 실패한 판서 다시 처리하기"
+      },
+      "CaptureStatus": {
+        "type": "string",
+        "enum": [
+          "uploaded",
+          "rectifying",
+          "segmenting",
+          "interpreting",
+          "done",
+          "failed"
+        ],
+        "title": "CaptureStatus",
+        "description": "처리 단계. 10-1/2/3 처리 화면과 1:1"
+      },
+      "CardDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "order_no": {
+            "type": "integer",
+            "title": "Order No"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "card_type": {
+            "$ref": "#/components/schemas/CardType"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "is_edited": {
+            "type": "boolean",
+            "title": "Is Edited"
+          },
+          "bbox": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Bbox"
+          },
+          "is_moved": {
+            "type": "boolean",
+            "title": "Is Moved"
+          },
+          "capture_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Capture Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "order_no",
+          "title",
+          "card_type",
+          "content",
+          "is_edited",
+          "bbox",
+          "is_moved",
+          "capture_id"
+        ],
+        "title": "CardDetail",
+        "description": "카드 하나. 어느 판서의 카드인지도 알려 준다 (결과 화면으로 돌아갈 때)"
+      },
+      "CardOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "order_no": {
+            "type": "integer",
+            "title": "Order No"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "card_type": {
+            "$ref": "#/components/schemas/CardType"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "is_edited": {
+            "type": "boolean",
+            "title": "Is Edited"
+          },
+          "bbox": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Bbox"
+          },
+          "is_moved": {
+            "type": "boolean",
+            "title": "Is Moved"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "order_no",
+          "title",
+          "card_type",
+          "content",
+          "is_edited",
+          "bbox",
+          "is_moved"
+        ],
+        "title": "CardOut"
+      },
+      "CardType": {
+        "type": "string",
+        "enum": [
+          "text",
+          "math",
+          "code"
+        ],
+        "title": "CardType",
+        "description": "표 인식이 다시 들어오면 table 추가"
+      },
+      "CardUpdate": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "card_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CardType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "CardUpdate",
+        "description": "보낸 것만 바꾼다"
+      },
+      "CardsMovedIn": {
+        "properties": {
+          "card_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Card Ids"
+          },
+          "moved": {
+            "type": "boolean",
+            "title": "Moved"
+          }
+        },
+        "type": "object",
+        "required": [
+          "card_ids",
+          "moved"
+        ],
+        "title": "CardsMovedIn",
+        "description": "옮김 표시 · 취소. 굿노트로 끌어다 놓거나 복사한 카드, \"N개 복사\"한 카드들"
+      },
+      "Destination": {
+        "properties": {
+          "semester_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semester Id"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "subject_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "semester_id",
+          "subject_id",
+          "subject_name"
+        ],
+        "title": "Destination",
+        "description": "지금 찍으면 어디에 저장되는지 (촬영 화면의 \"○○ 폴더에 저장\")\n\n과목이 없으면 미분류함이다. 학기가 아직 없으면 semester_id도 null이고,\n실제로 올릴 때 서버가 현재 학기를 만든다."
+      },
+      "EmailLoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 1,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "EmailLoginRequest"
+      },
+      "EmailSignupRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 8,
+            "title": "Password"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "name"
+        ],
+        "title": "EmailSignupRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HomeClass": {
+        "properties": {
+          "subject_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Subject Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start",
+            "examples": [
+              "10:30"
+            ]
+          },
+          "end": {
+            "type": "string",
+            "title": "End",
+            "examples": [
+              "12:00"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject_id",
+          "name",
+          "start",
+          "end"
+        ],
+        "title": "HomeClass",
+        "description": "수업 칸 하나 (\"수업 중\" 카드 · \"오늘 수업\" 한 줄)\n\n\"지금\" · \"2시간 뒤\" · \"42분 남음\" 같은 문구는 앱이 시각으로 계산한다."
+      },
+      "HomeExam": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "midterm",
+              "final"
+            ],
+            "title": "Kind"
+          },
+          "starts_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Starts On"
+          },
+          "ends_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Ends On"
+          },
+          "days_left": {
+            "type": "integer",
+            "title": "Days Left"
+          },
+          "in_progress": {
+            "type": "boolean",
+            "title": "In Progress"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "starts_on",
+          "ends_on",
+          "days_left",
+          "in_progress"
+        ],
+        "title": "HomeExam",
+        "description": "진행 중이거나 다가오는 시험 (학사일정 기준, app/services/exam_schedule.py)"
+      },
+      "HomeOut": {
+        "properties": {
+          "now_class": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HomeClass"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "today": {
+            "items": {
+              "$ref": "#/components/schemas/HomeClass"
+            },
+            "type": "array",
+            "title": "Today"
+          },
+          "week": {
+            "$ref": "#/components/schemas/HomeWeek"
+          },
+          "total_captures": {
+            "type": "integer",
+            "title": "Total Captures"
+          },
+          "exam": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HomeExam"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "now_class",
+          "today",
+          "week",
+          "total_captures",
+          "exam"
+        ],
+        "title": "HomeOut"
+      },
+      "HomeWeek": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date",
+            "title": "Start"
+          },
+          "days": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Days"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "last_week_total": {
+            "type": "integer",
+            "title": "Last Week Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "days",
+          "total",
+          "last_week_total"
+        ],
+        "title": "HomeWeek",
+        "description": "이번 주 막대 그래프. 정리가 끝난 판서만 센다"
+      },
+      "KakaoLoginRequest": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Access Token",
+            "description": "앱이 카카오 SDK로 받은 카카오 access token"
+          },
+          "allow_duplicate_email": {
+            "type": "boolean",
+            "title": "Allow Duplicate Email",
+            "description": "같은 이메일의 이메일 계정이 있어도 새 카카오 계정을 만든다 (409 email_account_exists 안내 창에서 '카카오로 새로 가입'을 고른 경우)",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token"
+        ],
+        "title": "KakaoLoginRequest"
+      },
+      "LoginResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token",
+            "description": "이후 요청에 Authorization: Bearer로 붙이는 우리 토큰"
+          },
+          "token_type": {
+            "type": "string",
+            "const": "bearer",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "is_new_user": {
+            "type": "boolean",
+            "title": "Is New User",
+            "description": "아직 시간표를 등록하지 않았는지 (어느 학기에도 과목이 없음). true면 앱이 시간표 등록으로, false면 홈으로 보낸다"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "is_new_user",
+          "user"
+        ],
+        "title": "LoginResponse"
+      },
+      "ProfileUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "school": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "School"
+          }
+        },
+        "type": "object",
+        "title": "ProfileUpdate",
+        "description": "보낸 것만 바꾼다. 학교는 빈 값(\"\")이나 null이면 비운다.\n\n\"안 보냄\"과 \"null을 보냄\"을 구분해야 해서 저장할 때 model_fields_set으로 보낸 칸을 확인한다."
+      },
+      "SemesterCreate": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "maximum": 2100.0,
+            "minimum": 2000.0,
+            "title": "Year"
+          },
+          "term": {
+            "$ref": "#/components/schemas/SemesterTerm"
+          },
+          "make_current": {
+            "type": "boolean",
+            "title": "Make Current",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "term"
+        ],
+        "title": "SemesterCreate"
+      },
+      "SemesterDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "term": {
+            "$ref": "#/components/schemas/SemesterTerm"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "is_current": {
+            "type": "boolean",
+            "title": "Is Current"
+          },
+          "subject_count": {
+            "type": "integer",
+            "title": "Subject Count"
+          },
+          "capture_count": {
+            "type": "integer",
+            "title": "Capture Count"
+          },
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/SubjectOut"
+            },
+            "type": "array",
+            "title": "Subjects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "year",
+          "term",
+          "label",
+          "is_current",
+          "subject_count",
+          "capture_count",
+          "subjects"
+        ],
+        "title": "SemesterDetail"
+      },
+      "SemesterOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "term": {
+            "$ref": "#/components/schemas/SemesterTerm"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "is_current": {
+            "type": "boolean",
+            "title": "Is Current"
+          },
+          "subject_count": {
+            "type": "integer",
+            "title": "Subject Count"
+          },
+          "capture_count": {
+            "type": "integer",
+            "title": "Capture Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "year",
+          "term",
+          "label",
+          "is_current",
+          "subject_count",
+          "capture_count"
+        ],
+        "title": "SemesterOut"
+      },
+      "SemesterTerm": {
+        "type": "string",
+        "enum": [
+          "first",
+          "summer",
+          "second",
+          "winter"
+        ],
+        "title": "SemesterTerm",
+        "description": "1학기 · 여름 · 2학기 · 겨울"
+      },
+      "SettingsUpdate": {
+        "properties": {
+          "notify_unmoved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Unmoved"
+          },
+          "notify_exam": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Exam"
+          }
+        },
+        "type": "object",
+        "title": "SettingsUpdate",
+        "description": "보낸 것만 바꾼다. null은 켜짐 · 꺼짐이 아니라서 거절한다"
+      },
+      "Slot-Input": {
+        "properties": {
+          "weekday": {
+            "type": "integer",
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Weekday",
+            "description": "0=월 … 6=일"
+          },
+          "start": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Start",
+            "description": "시작 시각 HH:MM (24시간)"
+          },
+          "end": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "End",
+            "description": "끝 시각 HH:MM (24시간)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "weekday",
+          "start",
+          "end"
+        ],
+        "title": "Slot",
+        "description": "수업 시간 한 칸"
+      },
+      "Subject": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/app__schemas__timetable__Slot"
+            },
+            "type": "array",
+            "title": "Slots"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "slots"
+        ],
+        "title": "Subject",
+        "description": "과목 하나. 시간이 없는 과목(사이버강의 등)은 slots가 비어 있다"
+      },
+      "SubjectIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/Slot-Input"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Slots",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "SubjectIn"
+      },
+      "SubjectOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "semester_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Semester Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/app__schemas__semester__Slot"
+            },
+            "type": "array",
+            "title": "Slots"
+          },
+          "capture_count": {
+            "type": "integer",
+            "title": "Capture Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "semester_id",
+          "name",
+          "slots",
+          "capture_count"
+        ],
+        "title": "SubjectOut"
+      },
+      "SubjectUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slots": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Slot-Input"
+                },
+                "type": "array",
+                "maxItems": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slots"
+          }
+        },
+        "type": "object",
+        "title": "SubjectUpdate",
+        "description": "보낸 것만 바꾼다. slots를 보내면 시간 칸 전체를 바꾼다"
+      },
+      "SuggestedSemester": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "term": {
+            "$ref": "#/components/schemas/SemesterTerm"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "term",
+          "label"
+        ],
+        "title": "SuggestedSemester",
+        "description": "오늘 날짜 기준 기본 학기 (앱 학기 선택 휠의 처음 값)"
+      },
+      "TermTimetableSave": {
+        "properties": {
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/SubjectIn"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Subjects"
+          },
+          "year": {
+            "type": "integer",
+            "maximum": 2100.0,
+            "minimum": 2000.0,
+            "title": "Year"
+          },
+          "term": {
+            "$ref": "#/components/schemas/SemesterTerm"
+          },
+          "make_current": {
+            "type": "boolean",
+            "title": "Make Current",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "subjects",
+          "year",
+          "term"
+        ],
+        "title": "TermTimetableSave",
+        "description": "학기를 골라서 \"이대로 저장\" (가입 후 첫 등록 · 새 학기 추가). 학기가 없으면 만든다"
+      },
+      "TimetableParseResult": {
+        "properties": {
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/Subject"
+            },
+            "type": "array",
+            "title": "Subjects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subjects"
+        ],
+        "title": "TimetableParseResult"
+      },
+      "TimetableSave": {
+        "properties": {
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/SubjectIn"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Subjects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subjects"
+        ],
+        "title": "TimetableSave",
+        "description": "시간표 확인 화면의 \"이대로 저장\". 이 목록이 그 학기 과목 전체가 된다"
+      },
+      "UserOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/AuthProvider"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "school": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "School"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/UserSettingsOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "provider",
+          "name",
+          "email",
+          "school",
+          "settings"
+        ],
+        "title": "UserOut"
+      },
+      "UserSettingsOut": {
+        "properties": {
+          "notify_unmoved": {
+            "type": "boolean",
+            "title": "Notify Unmoved",
+            "default": true
+          },
+          "notify_exam": {
+            "type": "boolean",
+            "title": "Notify Exam",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "UserSettingsOut",
+        "description": "알림 설정. 알림 예약은 앱이 하고 서버는 켜짐 · 꺼짐만 저장한다 (#21)"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "app__schemas__semester__Slot": {
+        "properties": {
+          "weekday": {
+            "type": "integer",
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Weekday",
+            "description": "0=월 … 6=일"
+          },
+          "start": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Start",
+            "description": "시작 시각 HH:MM (24시간)"
+          },
+          "end": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "End",
+            "description": "끝 시각 HH:MM (24시간)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "weekday",
+          "start",
+          "end"
+        ],
+        "title": "Slot",
+        "description": "수업 시간 한 칸"
+      },
+      "app__schemas__timetable__Slot": {
+        "properties": {
+          "weekday": {
+            "type": "integer",
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Weekday",
+            "description": "0=월 … 6=일"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start",
+            "description": "시작 시각 HH:MM (24시간)"
+          },
+          "end": {
+            "type": "string",
+            "title": "End",
+            "description": "끝 시각 HH:MM (24시간)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "weekday",
+          "start",
+          "end"
+        ],
+        "title": "Slot",
+        "description": "수업 시간 한 칸"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "description": "POST /auth/kakao가 돌려준 access_token",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
